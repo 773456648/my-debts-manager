@@ -1,0 +1,18 @@
+{
+  "name": "heiba-vault-system",
+  "version": "1.0.0",
+  "description": "منظومة الهيبة للخصوصية المشفرة",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.2",
+    "multer": "^1.4.5-lts.1",
+    "path": "^0.12.7"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
