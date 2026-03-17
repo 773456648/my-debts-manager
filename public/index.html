@@ -472,7 +472,7 @@
         let activeTarget = null; 
         let userType = 'merchant'; 
         let discoveredData = [];
-        let userStatuses = {}; // متغير جديد لحفظ حالة التسجيل والتوثيق للأسماء
+        let userStatuses = {}; 
 
         // ----------------------------------------------------------------
         // دوال مساعدة للواجهة (UI Helpers)
@@ -607,37 +607,38 @@
                     showToast(data.error || "حدث خطأ غير معروف", "error");
                 }
             } catch (e) {
-                console.log("No backend detected, simulating login for demonstration.");
-                user = {
-                    id: Date.now(),
-                    name: name,
-                    type: userType,
-                    myRecords: [],
-                    verified: false
-                };
+                user = { id: Date.now(), name: name, type: userType, myRecords: [], verified: false };
                 if(document.getElementById('remember-me').checked) localStorage.setItem('heiba_auth_session', JSON.stringify(user));
                 showToast("تم الدخول (وضع المحاكاة)", "success");
                 start();
             }
         }
 
-        // دالة جديدة لجلب حالات التسجيل والتوثيق للأسماء
+        // دالة لجلب حالات التسجيل والتوثيق للأسماء مع المزامنة اللحظية
         async function fetchStatuses(names) {
             if(!names || names.length === 0) return;
             try {
                 const res = await fetch('/api/check-status', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ names })
+                    body: JSON.stringify({ names, requesterId: user.id })
                 });
                 const data = await res.json();
-                userStatuses = {...userStatuses, ...data};
-                // إعادة رسم القائمة بعد جلب الحالات
+                
+                // تحديث حالة المستخدم الحالي نفسه (للتوثيق)
+                if(data.requesterStatus && data.requesterStatus.verified !== user.verified) {
+                    user.verified = data.requesterStatus.verified;
+                    const userVerifyBadge = user.verified ? '<span class="text-blue-400 text-lg ml-1"><style> @keyframes fadiGlow { 0% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } 50% { box-shadow: 0 0 20px #22c55e, inset 0 0 10px rgba(255,255,255,0.5); transform: translateX(2px); } 100% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } } .glass-verify { display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.9); border: 1px solid rgba(255,255,255,0.3); padding: 2px 10px; border-radius: 50px; color: white; vertical-align: middle; animation: fadiGlow 3s ease-in-out infinite; backdrop-filter: blur(4px); } </style> <span class="glass-verify"> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 11px; font-weight: bold; font-family: sans-serif;">موثق</span> </span></span>' : '';
+                    document.getElementById('display-name').innerHTML = `${user.name} ${userVerifyBadge}`;
+                }
+
+                // تحديث قائمة العملاء
+                userStatuses = {...userStatuses, ...data.statuses};
                 if(user.type === 'merchant') {
                     renderList();
                     if(activeTarget) {
                         const status = userStatuses[activeTarget] || {};
-                        const verifyBadge = status.verified ? '<span class="text-blue-400 text-2xl ml-2" title="حساب موثق">☑️</span>' : '';
+                        const verifyBadge = status.verified ? '<span class="text-blue-400 text-2xl ml-2"><style> @keyframes fadiGlow { 0% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } 50% { box-shadow: 0 0 20px #22c55e, inset 0 0 10px rgba(255,255,255,0.5); transform: translateX(2px); } 100% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } } .glass-verify { display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.9); border: 1px solid rgba(255,255,255,0.3); padding: 2px 10px; border-radius: 50px; color: white; vertical-align: middle; animation: fadiGlow 3s ease-in-out infinite; backdrop-filter: blur(4px); } </style> <span class="glass-verify"> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 11px; font-weight: bold; font-family: sans-serif;">موثق</span> </span></span>' : '';
                         document.getElementById('active-target-name').innerHTML = `${activeTarget} ${verifyBadge}`;
                     }
                 }
@@ -648,16 +649,24 @@
             document.getElementById('auth-ui').classList.add('hidden'); 
             document.getElementById('main-ui').classList.remove('hidden');
             
-            // إضافة علامة التوثيق لاسم المستخدم نفسه إذا كان موثقاً
-            const userVerifyBadge = user.verified ? '<span class="text-blue-400 text-lg ml-1" title="حساب موثق">☑️</span>' : '';
+            const userVerifyBadge = user.verified ? '<span class="text-blue-400 text-lg ml-1"><style> @keyframes fadiGlow { 0% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } 50% { box-shadow: 0 0 20px #22c55e, inset 0 0 10px rgba(255,255,255,0.5); transform: translateX(2px); } 100% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } } .glass-verify { display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.9); border: 1px solid rgba(255,255,255,0.3); padding: 2px 10px; border-radius: 50px; color: white; vertical-align: middle; animation: fadiGlow 3s ease-in-out infinite; backdrop-filter: blur(4px); } </style> <span class="glass-verify"> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 11px; font-weight: bold; font-family: sans-serif;">موثق</span> </span></span>' : '';
             document.getElementById('display-name').innerHTML = `${user.name} ${userVerifyBadge}`;
             document.getElementById('role-tag').innerText = user.type === 'merchant' ? '🏪 رتبة تاجر' : '👤 رتبة مواطن';
             
+            // نظام المزامنة اللحظية (كل 4 ثواني)
+            setInterval(() => {
+                if(user.type === 'merchant') {
+                    const targets = [...new Set(user.myRecords.map(r => r.targetName))];
+                    if(activeTarget && !targets.includes(activeTarget)) targets.push(activeTarget);
+                    fetchStatuses(targets);
+                } else {
+                    fetchStatuses([user.name]);
+                }
+            }, 4000);
+
             if(user.type === 'merchant') { 
                 document.getElementById('merchant-tools').classList.remove('hidden'); 
                 document.getElementById('add-form').classList.remove('hidden'); 
-                const targets = [...new Set(user.myRecords.map(r => r.targetName))];
-                fetchStatuses(targets); // جلب حالات العملاء
                 renderList(); 
                 calculateGrand(user.myRecords); 
             } else { 
@@ -692,7 +701,7 @@
             const n = document.getElementById('target-search').value.trim(); 
             if(!n) return; 
             activeTarget = n; 
-            fetchStatuses([n]); // جلب حالة الحساب الجديد
+            fetchStatuses([n]); 
             showDetails(n); 
             renderList(); 
             document.getElementById('target-search').value = ""; 
@@ -700,29 +709,26 @@
 
         function renderList() {
             const t = [...new Set(user.myRecords.map(r => r.targetName))];
-            
-            if(t.length === 0) {
+            if(t.length === 0 && !activeTarget) {
                 document.getElementById('main-list').innerHTML = `<p class="text-xs text-center text-gray-500 mt-4 italic">لا يوجد حسابات مسجلة بعد.</p>`;
                 return;
             }
+            // دمج الحساب النشط حالياً إذا لم يكن في السجلات
+            if(activeTarget && !t.includes(activeTarget)) t.push(activeTarget);
 
             document.getElementById('main-list').innerHTML = t.map(n => {
                 const status = userStatuses[n] || { registered: false, verified: false };
                 const regBadge = status.registered ? '<span class="text-[9px] bg-green-900/40 text-green-400 px-1.5 py-0.5 rounded border border-green-500/30">مسجل</span>' : '<span class="text-[9px] bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">غير مسجل</span>';
-                const verifyBadge = status.verified ? '<span class="text-blue-400 text-xs mr-1" title="حساب موثق">☑️</span>' : '';
+                const verifyBadge = status.verified ? '<span class="text-blue-400 text-xs mr-1"><style> @keyframes fadiGlow { 0% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } 50% { box-shadow: 0 0 20px #22c55e, inset 0 0 10px rgba(255,255,255,0.5); transform: translateX(2px); } 100% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } } .glass-verify { display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.9); border: 1px solid rgba(255,255,255,0.3); padding: 2px 10px; border-radius: 50px; color: white; vertical-align: middle; animation: fadiGlow 3s ease-in-out infinite; backdrop-filter: blur(4px); } </style> <span class="glass-verify"> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 11px; font-weight: bold; font-family: sans-serif;">موثق</span> </span></span>' : '';
 
                 return `
-                <div onclick="showDetails('${n}')" class="p-4 bg-zinc-900/50 rounded-xl cursor-pointer border border-white/5 hover:border-[#d4af37]/50 hover:bg-zinc-800 transition flex items-center gap-3 ${activeTarget === n ? 'border-[#d4af37] bg-zinc-800 shadow-md transform scale-[1.02]' : ''}">
-                    <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-white/10 relative">
-                        👤
-                    </div>
+                <div onclick="showDetails('${n}')" class="p-4 bg-zinc-900/50 rounded-xl cursor-pointer border border-white/5 hover:border-[#d4af37]/50 hover:bg-zinc-800 transition flex items-center gap-3 ${activeTarget === n ? 'border-[#d4af37] bg-zinc-800 shadow-md' : ''}">
+                    <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-white/10">👤</div>
                     <div class="font-bold text-sm flex-grow">
                         <div class="flex items-center">${n} ${verifyBadge}</div>
                         <div class="mt-1">${regBadge}</div>
                     </div>
-                    <div class="text-[10px] text-gray-500">عرض &rarr;</div>
-                </div>
-                `;
+                </div>`;
             }).join('');
         }
 
@@ -730,32 +736,24 @@
             try {
                 const res = await fetch(`/api/auto-discover?debtorName=${encodeURIComponent(user.name)}`);
                 discoveredData = await res.json();
-            } catch(e) {
-                if(!discoveredData.length) discoveredData = [];
-            }
+            } catch(e) { if(!discoveredData.length) discoveredData = []; }
 
             let all = []; 
             discoveredData.forEach(m => all = all.concat(m.records)); 
             calculateGrand(all);
             
             if(discoveredData.length === 0) {
-                document.getElementById('main-list').innerHTML = `<p class="text-xs text-center text-gray-500 mt-4 italic">لا يوجد مطالبات مالية مسجلة باسمك.</p>`;
+                document.getElementById('main-list').innerHTML = `<p class="text-xs text-center text-gray-500 mt-4 italic">لا يوجد مطالبات.</p>`;
             } else {
                 document.getElementById('main-list').innerHTML = discoveredData.map(m => {
-                    const verifyBadge = m.merchantVerified ? '<span class="text-blue-400 text-sm mr-1" title="حساب موثق">☑️</span>' : '';
+                    const verifyBadge = m.merchantVerified ? '<span class="text-blue-400 text-sm mr-1"><style> @keyframes fadiGlow { 0% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } 50% { box-shadow: 0 0 20px #22c55e, inset 0 0 10px rgba(255,255,255,0.5); transform: translateX(2px); } 100% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } } .glass-verify { display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.9); border: 1px solid rgba(255,255,255,0.3); padding: 2px 10px; border-radius: 50px; color: white; vertical-align: middle; animation: fadiGlow 3s ease-in-out infinite; backdrop-filter: blur(4px); } </style> <span class="glass-verify"> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 11px; font-weight: bold; font-family: sans-serif;">موثق</span> </span></span>' : '';
                     return `
                     <div onclick="showDetails('${m.merchantName}')" class="p-4 bg-zinc-900 border border-blue-900/30 rounded-xl mb-2 hover:border-blue-500 transition cursor-pointer flex justify-between items-center ${activeTarget === m.merchantName ? 'border-blue-500 bg-zinc-800' : ''}">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-blue-900/50">🏪</div>
-                            <div>
-                                <p class="font-bold text-sm flex items-center">${m.merchantName} ${verifyBadge}</p>
-                                <p class="text-[9px] text-blue-400 font-bold mt-1 flex items-center gap-1">
-                                    <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> مزامنة حية
-                                </p>
-                            </div>
+                            <p class="font-bold text-sm flex items-center">${m.merchantName} ${verifyBadge}</p>
                         </div>
-                    </div>
-                    `;
+                    </div>`;
                 }).join('');
             }
             if(activeTarget) showDetails(activeTarget);
@@ -766,14 +764,13 @@
             document.getElementById('empty-hint').classList.add('hidden'); 
             document.getElementById('details-pane').classList.remove('hidden');
             
-            // إضافة علامة التوثيق في شاشة التفاصيل الكبيرة
             let verifyBadge = '';
             if (user.type === 'merchant') {
                 const status = userStatuses[name] || {};
-                verifyBadge = status.verified ? '<span class="text-blue-400 text-2xl ml-2" title="حساب موثق">☑️</span>' : '';
+                verifyBadge = status.verified ? '<span class="text-blue-400 text-2xl ml-2"><style> @keyframes fadiGlow { 0% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } 50% { box-shadow: 0 0 20px #22c55e, inset 0 0 10px rgba(255,255,255,0.5); transform: translateX(2px); } 100% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } } .glass-verify { display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.9); border: 1px solid rgba(255,255,255,0.3); padding: 2px 10px; border-radius: 50px; color: white; vertical-align: middle; animation: fadiGlow 3s ease-in-out infinite; backdrop-filter: blur(4px); } </style> <span class="glass-verify"> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 11px; font-weight: bold; font-family: sans-serif;">موثق</span> </span></span>' : '';
             } else {
                 const m = discoveredData.find(m => m.merchantName === name);
-                verifyBadge = (m && m.merchantVerified) ? '<span class="text-blue-400 text-2xl ml-2" title="حساب موثق">☑️</span>' : '';
+                verifyBadge = (m && m.merchantVerified) ? '<span class="text-blue-400 text-2xl ml-2"><style> @keyframes fadiGlow { 0% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } 50% { box-shadow: 0 0 20px #22c55e, inset 0 0 10px rgba(255,255,255,0.5); transform: translateX(2px); } 100% { box-shadow: 0 0 5px #22c55e, inset 0 0 5px rgba(255,255,255,0.2); transform: translateX(-2px); } } .glass-verify { display: inline-flex; align-items: center; gap: 5px; background: rgba(34, 197, 94, 0.9); border: 1px solid rgba(255,255,255,0.3); padding: 2px 10px; border-radius: 50px; color: white; vertical-align: middle; animation: fadiGlow 3s ease-in-out infinite; backdrop-filter: blur(4px); } </style> <span class="glass-verify"> <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 11px; font-weight: bold; font-family: sans-serif;">موثق</span> </span></span>' : '';
             }
             document.getElementById('active-target-name').innerHTML = `${name} ${verifyBadge}`;
             
@@ -781,33 +778,20 @@
             let y=0, u=0, s=0;
             
             if(records.length === 0) {
-                document.getElementById('ops-list').innerHTML = `<div class="p-8 text-center text-gray-500 italic text-sm border border-dashed border-white/10 rounded-xl">لا توجد عمليات مسجلة في هذا الحساب حتى الآن.</div>`;
+                document.getElementById('ops-list').innerHTML = `<div class="p-8 text-center text-gray-500 italic text-sm border border-dashed border-white/10 rounded-xl">لا توجد عمليات.</div>`;
             } else {
                 document.getElementById('ops-list').innerHTML = records.map(r => {
-                    const a = parseFloat(r.amount); 
-                    const d = r.type === 'دين'; 
-                    if(r.currency === 'YER') y += d?a:-a; 
-                    else if(r.currency === 'USD') u += d?a:-a; 
-                    else s += d?a:-a; 
-                    
-                    const sign = d ? '+' : '-';
-                    const colorClass = d ? 'text-red-400' : 'text-green-400';
-                    const borderClass = d ? 'border-red-900/50' : 'border-green-900/50';
-                    const bgClass = d ? 'bg-red-900/10' : 'bg-green-900/10';
-                    const icon = d ? '↙️' : '↗️';
-
+                    const a = parseFloat(r.amount); const d = r.type === 'دين'; 
+                    if(r.currency === 'YER') y += d?a:-a; else if(r.currency === 'USD') u += d?a:-a; else s += d?a:-a; 
                     return `
-                        <div class="p-4 ${bgClass} rounded-xl border border-white/5 border-r-4 ${borderClass} flex justify-between items-center transition hover:bg-black/40">
-                            <div class="flex items-center gap-3">
-                                <span class="text-xl opacity-80">${icon}</span>
-                                <div>
-                                    <p class="font-bold text-sm text-gray-200">${r.note || (d ? 'تسجيل دين' : 'تسجيل سداد')}</p>
-                                    <p class="text-[10px] text-gray-500 mt-1">${new Date(r.date).toLocaleDateString('ar-YE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' })}</p>
-                                </div>
+                        <div class="p-4 ${d ? 'bg-red-900/10 border-red-900/50' : 'bg-green-900/10 border-green-900/50'} rounded-xl border-r-4 flex justify-between items-center">
+                            <div>
+                                <p class="font-bold text-sm text-gray-200">${r.note || (d ? 'تسجيل دين' : 'تسجيل سداد')}</p>
+                                <p class="text-[10px] text-gray-500">${new Date(r.date).toLocaleDateString('ar-YE')}</p>
                             </div>
                             <div class="text-left" dir="ltr">
-                                <p class="text-xl font-black ${colorClass} tracking-wider">${sign} ${a.toLocaleString()}</p>
-                                <p class="text-[10px] opacity-60 uppercase font-bold tracking-widest text-right mt-1">${r.currency}</p>
+                                <p class="text-xl font-black ${d ? 'text-red-400' : 'text-green-400'}">${d ? '+' : '-'} ${a.toLocaleString()}</p>
+                                <p class="text-[10px] opacity-60 uppercase font-bold">${r.currency}</p>
                             </div>
                         </div>`;
                 }).reverse().join(''); 
@@ -815,10 +799,8 @@
 
             document.getElementById('dt-yer').innerText = Math.abs(y).toLocaleString(); 
             document.getElementById('dt-yer').className = `text-sm font-bold ${y > 0 ? 'text-red-400' : (y < 0 ? 'text-green-400' : 'text-gray-500')}`;
-            
             document.getElementById('dt-usd').innerText = Math.abs(u).toLocaleString(); 
             document.getElementById('dt-usd').className = `text-sm font-bold ${u > 0 ? 'text-red-400' : (u < 0 ? 'text-green-400' : 'text-gray-500')}`;
-            
             document.getElementById('dt-sar').innerText = Math.abs(s).toLocaleString();
             document.getElementById('dt-sar').className = `text-sm font-bold ${s > 0 ? 'text-red-400' : (s < 0 ? 'text-green-400' : 'text-gray-500')}`;
 
@@ -827,75 +809,30 @@
 
         async function saveOp() {
             const a = document.getElementById('op-amt').value; 
-            if(!a || !activeTarget || parseFloat(a) <= 0) {
-                showToast("الرجاء إدخال مبلغ صحيح", "error");
-                return;
-            }
-
+            if(!a || !activeTarget || parseFloat(a) <= 0) { showToast("الرجاء إدخال مبلغ صحيح", "error"); return; }
             const newRecord = { 
-                id: Date.now(), 
-                targetName: activeTarget, 
-                amount: a, 
-                currency: document.getElementById('op-cur').value, 
-                type: document.getElementById('op-type').value, 
-                note: document.getElementById('op-note').value, 
-                date: new Date().toISOString() 
+                id: Date.now(), targetName: activeTarget, amount: a, currency: document.getElementById('op-cur').value, 
+                type: document.getElementById('op-type').value, note: document.getElementById('op-note').value, date: new Date().toISOString() 
             };
-
             user.myRecords.push(newRecord);
-            showDetails(activeTarget); 
-            calculateGrand(user.myRecords);
-            
-            try {
-                fetch('/api/sync', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ userId: user.id, myRecords: user.myRecords }) 
-                });
-            } catch(e) {}
-
+            showDetails(activeTarget); calculateGrand(user.myRecords);
+            try { fetch('/api/sync', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ userId: user.id, myRecords: user.myRecords }) }); } catch(e) {}
             showToast("تم تثبيت العملية بنجاح", "success");
-            document.getElementById('op-amt').value = ""; 
-            document.getElementById('op-note').value = ""; 
-            document.getElementById('tafqit-text').innerText = "";
-            document.getElementById('op-amt').focus();
-            
+            document.getElementById('op-amt').value = ""; document.getElementById('op-note').value = ""; document.getElementById('tafqit-text').innerText = "";
             localStorage.setItem('heiba_auth_session', JSON.stringify(user));
         }
 
         async function updatePassword() {
-            const p1 = document.getElementById('new-pass').value; 
-            const p2 = document.getElementById('confirm-pass').value;
-            
+            const p1 = document.getElementById('new-pass').value; const p2 = document.getElementById('confirm-pass').value;
             if(!p1) return showToast("الرجاء إدخال كلمة مرور", "error");
             if(p1 !== p2) return showToast("كلمتا المرور غير متطابقتين", "error");
-            
             try {
-                const res = await fetch('/api/update-pass', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ userId: user.id, newPass: p1 }) 
-                });
-                
-                if(res.ok) { 
-                    user.password = p1; 
-                    showToast("تم تحديث كلمة المرور بنجاح!", "success"); 
-                    closeModal('settings-modal'); 
-                } else {
-                    showToast("حدث خطأ في الخادم", "error");
-                }
-            } catch(e) {
-                user.password = p1;
-                localStorage.setItem('heiba_auth_session', JSON.stringify(user));
-                showToast("تم تحديث كلمة المرور بنجاح!", "success"); 
-                closeModal('settings-modal'); 
-            }
+                const res = await fetch('/api/update-pass', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ userId: user.id, newPass: p1 }) });
+                if(res.ok) { user.password = p1; showToast("تم التحديث!", "success"); closeModal('settings-modal'); }
+            } catch(e) { user.password = p1; localStorage.setItem('heiba_auth_session', JSON.stringify(user)); showToast("تم التحديث!", "success"); closeModal('settings-modal'); }
         }
 
-        function logout() { 
-            localStorage.removeItem('heiba_auth_session'); 
-            location.reload(); 
-        }
+        function logout() { localStorage.removeItem('heiba_auth_session'); location.reload(); }
     </script>
 </body>
 </html>
