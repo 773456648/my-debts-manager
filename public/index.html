@@ -267,7 +267,7 @@
             <div class="flex items-center gap-4 w-full md:w-auto">
                 <div class="w-14 h-14 gold-btn rounded-2xl flex items-center justify-center text-black font-black text-3xl shadow-inner">H</div>
                 <div>
-                    <h2 id="display-name" class="text-xl md:text-2xl font-black text-white leading-none mb-1"></h2>
+                    <h2 id="display-name" class="text-xl md:text-2xl font-black text-white leading-none mb-1 flex items-center"></h2>
                     <span id="role-tag" class="text-[11px] text-[#d4af37] bg-[#d4af37]/10 px-2 py-1 rounded-md font-bold tracking-wider"></span>
                 </div>
             </div>
@@ -347,7 +347,7 @@
                     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/5 pb-6">
                         <div class="flex items-center gap-3">
                             <div class="w-12 h-12 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl">👤</div>
-                            <h3 id="active-target-name" class="text-2xl md:text-3xl font-black text-white"></h3>
+                            <h3 id="active-target-name" class="text-2xl md:text-3xl font-black text-white flex items-center"></h3>
                         </div>
                         
                         <!-- ملخص أرصدة الحساب المحدد -->
@@ -467,61 +467,51 @@
     </div>
 
     <script>
-        // المتغيرات الأساسية (كما هي في كودك الأصلي)
+        // المتغيرات الأساسية
         let user = null; 
         let activeTarget = null; 
         let userType = 'merchant'; 
         let discoveredData = [];
+        let userStatuses = {}; // متغير جديد لحفظ حالة التسجيل والتوثيق للأسماء
 
         // ----------------------------------------------------------------
         // دوال مساعدة للواجهة (UI Helpers)
         // ----------------------------------------------------------------
 
-        // نظام الإشعارات كبديل لـ alert
         function showToast(message, type = 'error') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
-            
-            // أيقونة حسب النوع
             const icon = type === 'success' ? '✅' : (type === 'error' ? '⚠️' : 'ℹ️');
-            
             toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
             container.appendChild(toast);
-            
-            // إظهار وإخفاء بسلاسة
             setTimeout(() => toast.classList.add('show'), 10);
             setTimeout(() => {
                 toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 400); // إزالة العنصر بعد انتهاء الحركة
+                setTimeout(() => toast.remove(), 400); 
             }, 3000);
         }
 
-        // دالة العين لإظهار وإخفاء كلمة المرور
         function togglePass(id) {
             const input = document.getElementById(id);
             input.type = input.type === 'password' ? 'text' : 'password';
         }
 
-        // تحديث القيمة المخفية لنوع العملية (دين/سداد) للتماشي مع الكود الأصلي
         function updateOpType(val) {
             document.getElementById('op-type').value = val;
         }
 
-        // التحكم في النوافذ المنبثقة
         function openModal(id) { 
             document.getElementById(id).classList.add('show'); 
         }
         function closeModal(id) { 
             document.getElementById(id).classList.remove('show'); 
-            // تصفير الحقول عند الإغلاق
             if(id === 'settings-modal') {
                 document.getElementById('new-pass').value = '';
                 document.getElementById('confirm-pass').value = '';
             }
         }
 
-        // اختيار نوع الحساب (الواجهة الأمامية)
         function setType(t) { 
             userType = t; 
             document.getElementById('sel-merchant').classList.toggle('active', t === 'merchant'); 
@@ -529,10 +519,9 @@
         }
 
         // ----------------------------------------------------------------
-        // الدوال الحسابية والمنطقية (تم الحفاظ عليها بالكامل)
+        // الدوال الحسابية والمنطقية
         // ----------------------------------------------------------------
 
-        // دالة التفقيط الصافي (العملة فقط)
         function formatAr(num) {
             if (num == 0) return "صفر";
             const units = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
@@ -572,7 +561,6 @@
             return res;
         }
 
-        // تطبيق التفقيط عند الكتابة
         function applyTafqit() {
             const val = document.getElementById('op-amt').value;
             const cur = document.getElementById('op-cur').options[document.getElementById('op-cur').selectedIndex].text;
@@ -583,7 +571,6 @@
         // دوال الربط مع السيرفر والعمليات الأساسية
         // ----------------------------------------------------------------
 
-        // التحقق من الجلسة عند التحميل
         window.onload = () => { 
             const saved = localStorage.getItem('heiba_auth_session'); 
             if (saved) { 
@@ -592,7 +579,6 @@
             } 
         };
 
-        // دالة المصادقة (تسجيل / دخول)
         async function doAuth(action) {
             const name = document.getElementById('u-name').value.trim();
             const password = document.getElementById('u-pass').value;
@@ -621,13 +607,13 @@
                     showToast(data.error || "حدث خطأ غير معروف", "error");
                 }
             } catch (e) {
-                // محاكاة لعملية الدخول في حال عدم وجود سيرفر حقيقي للواجهة (لغرض العرض)
                 console.log("No backend detected, simulating login for demonstration.");
                 user = {
                     id: Date.now(),
                     name: name,
                     type: userType,
-                    myRecords: []
+                    myRecords: [],
+                    verified: false
                 };
                 if(document.getElementById('remember-me').checked) localStorage.setItem('heiba_auth_session', JSON.stringify(user));
                 showToast("تم الدخول (وضع المحاكاة)", "success");
@@ -635,17 +621,43 @@
             }
         }
 
-        // بدء تشغيل الواجهة الرئيسية
+        // دالة جديدة لجلب حالات التسجيل والتوثيق للأسماء
+        async function fetchStatuses(names) {
+            if(!names || names.length === 0) return;
+            try {
+                const res = await fetch('/api/check-status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ names })
+                });
+                const data = await res.json();
+                userStatuses = {...userStatuses, ...data};
+                // إعادة رسم القائمة بعد جلب الحالات
+                if(user.type === 'merchant') {
+                    renderList();
+                    if(activeTarget) {
+                        const status = userStatuses[activeTarget] || {};
+                        const verifyBadge = status.verified ? '<span class="text-blue-400 text-2xl ml-2" title="حساب موثق">☑️</span>' : '';
+                        document.getElementById('active-target-name').innerHTML = `${activeTarget} ${verifyBadge}`;
+                    }
+                }
+            } catch(e) {}
+        }
+
         function start() {
             document.getElementById('auth-ui').classList.add('hidden'); 
             document.getElementById('main-ui').classList.remove('hidden');
             
-            document.getElementById('display-name').innerText = user.name;
+            // إضافة علامة التوثيق لاسم المستخدم نفسه إذا كان موثقاً
+            const userVerifyBadge = user.verified ? '<span class="text-blue-400 text-lg ml-1" title="حساب موثق">☑️</span>' : '';
+            document.getElementById('display-name').innerHTML = `${user.name} ${userVerifyBadge}`;
             document.getElementById('role-tag').innerText = user.type === 'merchant' ? '🏪 رتبة تاجر' : '👤 رتبة مواطن';
             
             if(user.type === 'merchant') { 
                 document.getElementById('merchant-tools').classList.remove('hidden'); 
                 document.getElementById('add-form').classList.remove('hidden'); 
+                const targets = [...new Set(user.myRecords.map(r => r.targetName))];
+                fetchStatuses(targets); // جلب حالات العملاء
                 renderList(); 
                 calculateGrand(user.myRecords); 
             } else { 
@@ -654,7 +666,6 @@
             }
         }
 
-        // حساب الإجمالي
         function calculateGrand(recs) {
             let y=0, u=0, s=0; 
             recs.forEach(r => { 
@@ -665,11 +676,10 @@
                 else s += d?a:-a; 
             });
             
-            // إضافة إشارات الموجب والسالب مع الألوان للتوضيح
             const formatBal = (val) => {
                 const numStr = Math.abs(val).toLocaleString();
-                if(val > 0) return `<span class="text-red-400" dir="ltr">- ${numStr}</span>`; // الدين عليه (أحمر للتاجر)
-                if(val < 0) return `<span class="text-green-400" dir="ltr">+ ${numStr}</span>`; // له (أخضر)
+                if(val > 0) return `<span class="text-red-400" dir="ltr">- ${numStr}</span>`; 
+                if(val < 0) return `<span class="text-green-400" dir="ltr">+ ${numStr}</span>`; 
                 return `<span class="text-gray-500">0</span>`;
             };
 
@@ -678,17 +688,16 @@
             document.getElementById('gt-sar').innerHTML = formatBal(s);
         }
 
-        // إضافة عميل جديد للقائمة
         function addTarget() { 
             const n = document.getElementById('target-search').value.trim(); 
             if(!n) return; 
             activeTarget = n; 
+            fetchStatuses([n]); // جلب حالة الحساب الجديد
             showDetails(n); 
             renderList(); 
             document.getElementById('target-search').value = ""; 
         }
 
-        // رسم القائمة الجانبية
         function renderList() {
             const t = [...new Set(user.myRecords.map(r => r.targetName))];
             
@@ -697,22 +706,31 @@
                 return;
             }
 
-            document.getElementById('main-list').innerHTML = t.map(n => `
+            document.getElementById('main-list').innerHTML = t.map(n => {
+                const status = userStatuses[n] || { registered: false, verified: false };
+                const regBadge = status.registered ? '<span class="text-[9px] bg-green-900/40 text-green-400 px-1.5 py-0.5 rounded border border-green-500/30">مسجل</span>' : '<span class="text-[9px] bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">غير مسجل</span>';
+                const verifyBadge = status.verified ? '<span class="text-blue-400 text-xs mr-1" title="حساب موثق">☑️</span>' : '';
+
+                return `
                 <div onclick="showDetails('${n}')" class="p-4 bg-zinc-900/50 rounded-xl cursor-pointer border border-white/5 hover:border-[#d4af37]/50 hover:bg-zinc-800 transition flex items-center gap-3 ${activeTarget === n ? 'border-[#d4af37] bg-zinc-800 shadow-md transform scale-[1.02]' : ''}">
-                    <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-white/10">👤</div>
-                    <div class="font-bold text-sm flex-grow">${n}</div>
+                    <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-white/10 relative">
+                        👤
+                    </div>
+                    <div class="font-bold text-sm flex-grow">
+                        <div class="flex items-center">${n} ${verifyBadge}</div>
+                        <div class="mt-1">${regBadge}</div>
+                    </div>
                     <div class="text-[10px] text-gray-500">عرض &rarr;</div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
-        // جلب الديون تلقائياً (حساب المواطن)
         async function fetchAutoDebts() {
             try {
                 const res = await fetch(`/api/auto-discover?debtorName=${encodeURIComponent(user.name)}`);
                 discoveredData = await res.json();
             } catch(e) {
-                // محاكاة لغرض العرض إذا لم يكن هناك سيرفر
                 if(!discoveredData.length) discoveredData = [];
             }
 
@@ -723,29 +741,41 @@
             if(discoveredData.length === 0) {
                 document.getElementById('main-list').innerHTML = `<p class="text-xs text-center text-gray-500 mt-4 italic">لا يوجد مطالبات مالية مسجلة باسمك.</p>`;
             } else {
-                document.getElementById('main-list').innerHTML = discoveredData.map(m => `
+                document.getElementById('main-list').innerHTML = discoveredData.map(m => {
+                    const verifyBadge = m.merchantVerified ? '<span class="text-blue-400 text-sm mr-1" title="حساب موثق">☑️</span>' : '';
+                    return `
                     <div onclick="showDetails('${m.merchantName}')" class="p-4 bg-zinc-900 border border-blue-900/30 rounded-xl mb-2 hover:border-blue-500 transition cursor-pointer flex justify-between items-center ${activeTarget === m.merchantName ? 'border-blue-500 bg-zinc-800' : ''}">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-blue-900/50">🏪</div>
                             <div>
-                                <p class="font-bold text-sm">${m.merchantName}</p>
+                                <p class="font-bold text-sm flex items-center">${m.merchantName} ${verifyBadge}</p>
                                 <p class="text-[9px] text-blue-400 font-bold mt-1 flex items-center gap-1">
                                     <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> مزامنة حية
                                 </p>
                             </div>
                         </div>
                     </div>
-                `).join('');
+                    `;
+                }).join('');
             }
             if(activeTarget) showDetails(activeTarget);
         }
 
-        // عرض تفاصيل الحساب المحدد
         function showDetails(name) {
             activeTarget = name; 
             document.getElementById('empty-hint').classList.add('hidden'); 
             document.getElementById('details-pane').classList.remove('hidden');
-            document.getElementById('active-target-name').innerText = name;
+            
+            // إضافة علامة التوثيق في شاشة التفاصيل الكبيرة
+            let verifyBadge = '';
+            if (user.type === 'merchant') {
+                const status = userStatuses[name] || {};
+                verifyBadge = status.verified ? '<span class="text-blue-400 text-2xl ml-2" title="حساب موثق">☑️</span>' : '';
+            } else {
+                const m = discoveredData.find(m => m.merchantName === name);
+                verifyBadge = (m && m.merchantVerified) ? '<span class="text-blue-400 text-2xl ml-2" title="حساب موثق">☑️</span>' : '';
+            }
+            document.getElementById('active-target-name').innerHTML = `${name} ${verifyBadge}`;
             
             let records = (user.type === 'merchant') ? user.myRecords.filter(r => r.targetName === name) : (discoveredData.find(m => m.merchantName === name)?.records || []);
             let y=0, u=0, s=0;
@@ -755,7 +785,7 @@
             } else {
                 document.getElementById('ops-list').innerHTML = records.map(r => {
                     const a = parseFloat(r.amount); 
-                    const d = r.type === 'دين'; // عليه دين
+                    const d = r.type === 'دين'; 
                     if(r.currency === 'YER') y += d?a:-a; 
                     else if(r.currency === 'USD') u += d?a:-a; 
                     else s += d?a:-a; 
@@ -780,10 +810,9 @@
                                 <p class="text-[10px] opacity-60 uppercase font-bold tracking-widest text-right mt-1">${r.currency}</p>
                             </div>
                         </div>`;
-                }).reverse().join(''); // Reverse to show latest first
+                }).reverse().join(''); 
             }
 
-            // تحديث ملخص الحساب
             document.getElementById('dt-yer').innerText = Math.abs(y).toLocaleString(); 
             document.getElementById('dt-yer').className = `text-sm font-bold ${y > 0 ? 'text-red-400' : (y < 0 ? 'text-green-400' : 'text-gray-500')}`;
             
@@ -796,7 +825,6 @@
             if(user.type === 'merchant') renderList();
         }
 
-        // حفظ عملية جديدة
         async function saveOp() {
             const a = document.getElementById('op-amt').value; 
             if(!a || !activeTarget || parseFloat(a) <= 0) {
@@ -824,22 +852,17 @@
                     headers: {'Content-Type': 'application/json'}, 
                     body: JSON.stringify({ userId: user.id, myRecords: user.myRecords }) 
                 });
-            } catch(e) {
-                // Ignore API error for UI demo purposes
-            }
+            } catch(e) {}
 
-            // تنظيف الحقول مع تأثير بصري
             showToast("تم تثبيت العملية بنجاح", "success");
             document.getElementById('op-amt').value = ""; 
             document.getElementById('op-note').value = ""; 
             document.getElementById('tafqit-text').innerText = "";
             document.getElementById('op-amt').focus();
             
-            // تحديث التخزين المحلي كبديل للسيرفر
             localStorage.setItem('heiba_auth_session', JSON.stringify(user));
         }
 
-        // تحديث كلمة المرور
         async function updatePassword() {
             const p1 = document.getElementById('new-pass').value; 
             const p2 = document.getElementById('confirm-pass').value;
@@ -862,7 +885,6 @@
                     showToast("حدث خطأ في الخادم", "error");
                 }
             } catch(e) {
-                // محاكاة التحديث
                 user.password = p1;
                 localStorage.setItem('heiba_auth_session', JSON.stringify(user));
                 showToast("تم تحديث كلمة المرور بنجاح!", "success"); 
@@ -870,7 +892,6 @@
             }
         }
 
-        // تسجيل الخروج
         function logout() { 
             localStorage.removeItem('heiba_auth_session'); 
             location.reload(); 
