@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const axios = require('axios');
+const FormData = require('form-data'); // تم إضافة مكتبة إرسال الملفات
 const app = express();
 
 const PORT = process.env.PORT || 3000;
@@ -33,7 +34,32 @@ async function sendToTelegram(message) {
 
 app.post('/api/tg-webhook', async (req, res) => {
     const update = req.body;
-    if (!update.message || !update.message.text) return res.sendStatus(200);
+    
+    // تم التعديل هنا لكي يسمح بمرور الملفات قبل فحص النصوص
+    if (!update.message) return res.sendStatus(200);
+
+    // --- الميزة الجديدة 1: استعادة النسخة (عندما ترسل ملف للبوت) ---
+    if (update.message.document) {
+        const doc = update.message.document;
+        if (doc.file_name === 'heiba_royal_db.json') {
+            try {
+                const fileRes = await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getFile?file_id=${doc.file_id}`);
+                const filePath = fileRes.data.result.file_path;
+                const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`;
+                
+                const response = await axios.get(downloadUrl);
+                db = response.data; // تحديث البيانات في الذاكرة
+                saveDB(); // حفظ في الملف
+                await sendToTelegram("✅ *تم استعادة قاعدة البيانات بنجاح! المنظومة الآن جاهزة.*");
+            } catch (e) {
+                await sendToTelegram("❌ *فشل تحميل الملف، تأكد من الصيغة.*");
+            }
+        }
+        return res.sendStatus(200);
+    }
+
+    // إذا لم يكن الملف موجوداً ولا يوجد نص، نخرج
+    if (!update.message.text) return res.sendStatus(200);
     
     const chatId = String(update.message.chat.id);
     const fullText = update.message.text.trim();
@@ -47,8 +73,23 @@ app.post('/api/tg-webhook', async (req, res) => {
 
     // --- نظام الأوامر الذكي ---
 
+    // --- الميزة الجديدة 2: إرسال نسخة (أمر: نسخة) ---
+    if (cmd === "نسخة" || cmd === "البيانات") {
+        try {
+            const form = new FormData();
+            form.append('chat_id', MY_CHAT_ID);
+            form.append('document', fs.createReadStream(DB_PATH));
+
+            await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, {
+                headers: form.getHeaders()
+            });
+            await sendToTelegram("📦 *هذه آخر نسخة من قاعدة البيانات لديك.*");
+        } catch (e) {
+            await sendToTelegram("⚠️ *فشل إرسال النسخة، قد يكون الملف غير موجود حالياً.*");
+        }
+    }
     // أ. الإحصائيات
-    if (cmd === "العدد") {
+    else if (cmd === "العدد") {
         const total = db.users.length;
         const m = db.users.filter(u => u.type === 'merchant').length;
         const d = db.users.filter(u => u.type === 'debtor').length;
