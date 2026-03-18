@@ -8,18 +8,14 @@ const DB_PATH = './heiba_royal_db.json';
 // إعدادات التلجرام
 const TELEGRAM_TOKEN = '7543475859:AAENXZxHPQZafOlvBwFr6EatUFD31iYq-ks';
 const MY_CHAT_ID = '5042495708';
-const ADMIN_PASSWORD = '771232690'; // كلمة السر المطلوبة قبل الأوامر
+const ADMIN_PASSWORD = '771232690'; // كلمة السر الإجبارية
 
 app.use(express.json());
 app.use(express.static('public'));
 
 let db = { users: [] };
 if (fs.existsSync(DB_PATH)) {
-    try { 
-        db = JSON.parse(fs.readFileSync(DB_PATH)); 
-    } catch (e) { 
-        db = { users: [] }; 
-    }
+    try { db = JSON.parse(fs.readFileSync(DB_PATH)); } catch (e) { db = { users: [] }; }
 }
 
 const saveDB = () => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
@@ -31,9 +27,7 @@ async function sendToTelegram(message) {
             text: message,
             parse_mode: 'Markdown'
         });
-    } catch (e) { 
-        console.error("Telegram Send Error"); 
-    }
+    } catch (e) { console.error("Telegram Error"); }
 }
 
 app.post('/api/tg-webhook', async (req, res) => {
@@ -41,90 +35,86 @@ app.post('/api/tg-webhook', async (req, res) => {
     if (!update.message || !update.message.text) return res.sendStatus(200);
     
     const chatId = String(update.message.chat.id);
-    let text = update.message.text.trim();
-    
-    if (chatId !== MY_CHAT_ID) return res.sendStatus(200);
+    const fullText = update.message.text.trim();
 
-    // 1. أمر الإحصائيات (بدون كلمة سر)
-    if (text === "العدد") {
+    // التحقق من الهوية (Chat ID) وكلمة السر (Password)
+    if (chatId !== MY_CHAT_ID || !fullText.startsWith(ADMIN_PASSWORD)) {
+        // إذا كان الشخص غريب أو لم يضع كلمة السر، لن يستجيب البوت نهائياً
+        return res.sendStatus(200);
+    }
+
+    // استخراج الأمر بعد كلمة السر
+    const cmd = fullText.replace(ADMIN_PASSWORD, "").trim();
+
+    // 1. أمر الإحصائيات
+    if (cmd === "العدد") {
         const total = db.users.length;
-        const merchants = db.users.filter(u => u.type === 'merchant').length;
-        const debtors = db.users.filter(u => u.type === 'debtor').length;
-        return sendToTelegram(`📊 **إحصائيات المنصة:**\n\n👥 إجمالي المشتركين: ${total}\n👑 عدد التجار: ${merchants}\n👤 عدد المواطنين: ${debtors}`);
+        const m = db.users.filter(u => u.type === 'merchant').length;
+        const d = db.users.filter(u => u.type === 'debtor').length;
+        sendToTelegram(`📊 **الإحصائيات:**\n\n👥 الكل: ${total}\n👑 تجار: ${m}\n👤 مواطنين: ${d}`);
     } 
-
-    // 2. التحقق من كلمة السر للأوامر الحساسة
-    if (!text.startsWith(ADMIN_PASSWORD)) {
-        // إذا لم يبدأ بكلمة السر، ابحث عن الاسم فقط (كود البحث الأصلي)
-        const foundUsers = db.users.filter(u => u.name.toLowerCase() === text.toLowerCase());
-        if (foundUsers.length > 0) {
-            let report = `📊 **بيانات الحساب [${text}]:**\n`;
-            foundUsers.forEach(u => {
+    // 2. عرض الكل
+    else if (cmd === "كل الأعضاء" || cmd === "كل العضا") {
+        if (db.users.length === 0) return sendToTelegram("⚠️ القائمة فارغة.");
+        let list = "📋 **قائمة الأعضاء:**\n";
+        db.users.forEach((u, i) => {
+            list += `\n${i + 1}. ${u.name} ${u.verified ? '✅' : ''} (${u.type === 'merchant' ? 'تاجر' : 'مواطن'})`;
+        });
+        sendToTelegram(list);
+    }
+    // 3. التوثيق (يوثق التاجر والمواطن معاً لنفس الاسم)
+    else if (cmd.endsWith(" توثيق")) {
+        const name = cmd.replace(" توثيق", "").trim();
+        const targets = db.users.filter(u => u.name.toLowerCase() === name.toLowerCase());
+        if (targets.length > 0) {
+            targets.forEach(u => u.verified = true);
+            saveDB();
+            sendToTelegram(`✅ **تم التوثيق بنجاح:**\nتم توثيق كل الحسابات باسم [${name}]`);
+        } else sendToTelegram(`❌ الاسم [${name}] غير موجود.`);
+    }
+    // 4. إلغاء التوثيق
+    else if (cmd.endsWith(" الغاء توثيق")) {
+        const name = cmd.replace(" الغاء توثيق", "").trim();
+        const targets = db.users.filter(u => u.name.toLowerCase() === name.toLowerCase());
+        if (targets.length > 0) {
+            targets.forEach(u => u.verified = false);
+            saveDB();
+            sendToTelegram(`🚫 **إلغاء التوثيق:**\nتم للأسم [${name}]`);
+        } else sendToTelegram(`❌ الاسم [${name}] غير موجود.`);
+    }
+    // 5. الحذف
+    else if (cmd.endsWith(" حذف")) {
+        const name = cmd.replace(" حذف", "").trim();
+        const initialCount = db.users.length;
+        db.users = db.users.filter(u => u.name.toLowerCase() !== name.toLowerCase());
+        if (db.users.length < initialCount) {
+            saveDB();
+            sendToTelegram(`🗑 **تم الحذف:**\nجميع حسابات [${name}]`);
+        } else sendToTelegram(`❌ الاسم [${name}] غير موجود.`);
+    }
+    // 6. البحث (إذا أرسلت كلمة السر + الاسم فقط)
+    else {
+        const name = cmd;
+        const found = db.users.filter(u => u.name.toLowerCase() === name.toLowerCase());
+        if (found.length > 0) {
+            let rep = `📊 **بيانات الحساب [${name}]:**\n`;
+            found.forEach(u => {
                 let y=0, usd=0, s=0;
                 (u.myRecords || []).forEach(r => {
                     const a = parseFloat(r.amount); const d = r.type === 'دين';
                     if(r.currency === 'YER') y+=d?a:-a; else if(r.currency === 'USD') usd+=d?a:-a; else s+=d?a:-a;
                 });
-                report += `\n👤 النوع: ${u.type === 'merchant' ? 'تاجر' : 'مواطن'}\n✨ الحالة: ${u.verified ? 'موثق' : 'غير موثق'}\n🔑 السر: \`${u.password}\`\n💰 يمني: ${y}\n💵 دولار: ${usd}\n🇸🇦 سعودي: ${s}\n---`;
+                rep += `\n👤 النوع: ${u.type === 'merchant' ? 'تاجر' : 'مواطن'}\n✨ الحالة: ${u.verified ? 'موثق' : 'غير موثق'}\n🔑 السر: \`${u.password}\`\n💰 يمني: ${y}\n💵 دولار: ${usd}\n🇸🇦 سعودي: ${s}\n---`;
             });
-            sendToTelegram(report);
-        } else if (text !== "/start") {
-            sendToTelegram(`🔍 لم يتم العثور على [${text}] أو كلمة السر خطأ.`);
-        }
-        return res.sendStatus(200);
-    }
-
-    // إذا وصل الكود هنا، يعني أن الرسالة بدأت بكلمة السر 771232690
-    // نقوم بإزالة كلمة السر من النص لمعالجة الأمر
-    const commandText = text.replace(ADMIN_PASSWORD, "").trim();
-
-    if (commandText === "كل الأعضاء" || commandText === "كل العضا") {
-        if (db.users.length === 0) sendToTelegram("⚠️ لا يوجد أعضاء.");
-        else {
-            let list = "📋 **قائمة جميع الأعضاء:**\n";
-            db.users.forEach((u, index) => {
-                const verifiedIcon = u.verified ? '☑️' : '';
-                list += `\n${index + 1}. ${u.name} ${verifiedIcon} (${u.type === 'merchant' ? 'تاجر' : 'مواطن'})`;
-            });
-            sendToTelegram(list);
+            sendToTelegram(rep);
+        } else {
+            sendToTelegram(`🔍 لم يتم العثور على [${name}]`);
         }
     }
-    else if (commandText.endsWith(" الغاء توثيق")) {
-        const targetName = commandText.replace(" الغاء توثيق", "").trim();
-        const usersToUnverify = db.users.filter(u => u.name.toLowerCase() === targetName.toLowerCase());
-        
-        if (usersToUnverify.length > 0) {
-            usersToUnverify.forEach(u => u.verified = false);
-            saveDB();
-            sendToTelegram(`🚫 **تم إلغاء التوثيق:** لجميع حسابات [${targetName}]`);
-        } else sendToTelegram(`❌ الاسم [${targetName}] غير موجود.`);
-    }
-    else if (commandText.endsWith(" توثيق")) {
-        const targetName = commandText.replace(" توثيق", "").trim();
-        // البحث عن كل الحسابات بهذا الاسم (تاجر أو مواطن)
-        const usersToVerify = db.users.filter(u => u.name.toLowerCase() === targetName.toLowerCase());
-        
-        if (usersToVerify.length > 0) {
-            usersToVerify.forEach(u => u.verified = true);
-            saveDB();
-            sendToTelegram(`✅ **تم التوثيق:** تم توثيق (تاجر ومواطن) للاسم [${targetName}]`);
-        } else sendToTelegram(`❌ الاسم [${targetName}] غير موجود.`);
-    }
-    else if (commandText.endsWith(" حذف")) {
-        const targetName = commandText.replace(" حذف", "").trim();
-        const initialCount = db.users.length;
-        db.users = db.users.filter(u => u.name.toLowerCase() !== targetName.toLowerCase());
-        if (db.users.length < initialCount) { 
-            saveDB(); 
-            sendToTelegram(`🗑 **تم الحذف:** جميع حسابات [${targetName}]`); 
-        }
-        else sendToTelegram(`❌ الاسم [${targetName}] غير موجود.`);
-    } 
-    
     res.sendStatus(200);
 });
 
-// باقي الـ APIs كما هي بدون تغيير لضمان عمل الموقع
+// باقي الأكواد الخاصة بـ API الموقع (auth, sync, check-status) تبقى كما هي لضمان عمل تطبيقك
 app.post('/api/auth', async (req, res) => {
     const { name, password, type, action } = req.body;
     const normalizedName = name.trim().toLowerCase();
@@ -134,7 +124,7 @@ app.post('/api/auth', async (req, res) => {
         const newUser = { id: "H" + Math.random().toString(36).substr(2, 7), name: name.trim(), password, type, myRecords: [], verified: false, createdAt: new Date().toISOString() };
         db.users.push(newUser);
         saveDB();
-        sendToTelegram(`✨ **تسجيل جديد:**\nالاسم: ${newUser.name}\nالنوع: ${type === 'merchant' ? 'تاجر' : 'مواطن'}`);
+        sendToTelegram(`✨ **تسجيل جديد من الموقع:**\nالاسم: ${newUser.name}\nالنوع: ${type === 'merchant' ? 'تاجر' : 'مواطن'}`);
         return res.json(newUser);
     } else {
         const user = db.users.find(u => u.name.toLowerCase() === normalizedName && u.password === password && u.type === type);
@@ -181,4 +171,4 @@ app.get('/api/auto-discover', (req, res) => {
     res.json(results);
 });
 
-app.listen(PORT, () => console.log(`SERVER RUNNING ON PORT ${PORT}`));
+app.listen(PORT, () => console.log(`SERVER RUNNING`));
