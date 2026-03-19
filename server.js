@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const axios = require('axios');
-const FormData = require('form-data'); // تم إضافة مكتبة إرسال الملفات
+const FormData = require('form-data');
 const app = express();
 
 const PORT = process.env.PORT || 3000;
@@ -22,6 +22,7 @@ if (fs.existsSync(DB_PATH)) {
 
 const saveDB = () => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
+// دالة إرسال الرسائل النصية
 async function sendToTelegram(message) {
     try {
         await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
@@ -32,28 +33,25 @@ async function sendToTelegram(message) {
     } catch (e) { console.error("Telegram Error"); }
 }
 
-// --- الميزة الجديدة: دالة إرسال الملف تلقائياً ---
-async function sendBackupFile(caption) {
+// --- الميزة المطلوبة: دالة إرسال ملف قاعدة البيانات تلقائياً ---
+async function sendFileToTelegram(caption = "📦 نسخة احتياطية محدثة") {
     try {
         const form = new FormData();
         form.append('chat_id', MY_CHAT_ID);
-        form.append('document', fs.createReadStream(DB_PATH));
         form.append('caption', caption);
+        form.append('document', fs.createReadStream(DB_PATH));
 
         await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, {
             headers: form.getHeaders()
         });
-    } catch (e) { console.error("Backup Send Error"); }
+    } catch (e) { console.error("Error sending automatic backup file"); }
 }
-// -------------------------------------------------
 
 app.post('/api/tg-webhook', async (req, res) => {
     const update = req.body;
-    
-    // تم التعديل هنا لكي يسمح بمرور الملفات قبل فحص النصوص
     if (!update.message) return res.sendStatus(200);
 
-    // --- الميزة الجديدة 1: استعادة النسخة (عندما ترسل ملف للبوت) ---
+    // استعادة النسخة (عند إرسال ملف heiba_royal_db.json للبوت)
     if (update.message.document) {
         const doc = update.message.document;
         if (doc.file_name === 'heiba_royal_db.json') {
@@ -63,8 +61,8 @@ app.post('/api/tg-webhook', async (req, res) => {
                 const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`;
                 
                 const response = await axios.get(downloadUrl);
-                db = response.data; // تحديث البيانات في الذاكرة
-                saveDB(); // حفظ في الملف
+                db = response.data;
+                saveDB();
                 await sendToTelegram("✅ *تم استعادة قاعدة البيانات بنجاح! المنظومة الآن جاهزة.*");
             } catch (e) {
                 await sendToTelegram("❌ *فشل تحميل الملف، تأكد من الصيغة.*");
@@ -73,44 +71,28 @@ app.post('/api/tg-webhook', async (req, res) => {
         return res.sendStatus(200);
     }
 
-    // إذا لم يكن الملف موجوداً ولا يوجد نص، نخرج
     if (!update.message.text) return res.sendStatus(200);
     
     const chatId = String(update.message.chat.id);
     const fullText = update.message.text.trim();
 
-    // 1. التحقق من كلمة السر والـ ID
     if (chatId !== MY_CHAT_ID || !fullText.startsWith(ADMIN_PASSWORD)) return res.sendStatus(200);
 
-    // 2. استخراج النص بعد كلمة السر وتصفيته
     let cmd = fullText.substring(ADMIN_PASSWORD.length).trim();
     if (!cmd) return res.sendStatus(200);
 
-    // --- نظام الأوامر الذكي ---
-
-    // --- الميزة الجديدة 2: إرسال نسخة (أمر: نسخة) ---
+    // أمر طلب نسخة يدوياً
     if (cmd === "نسخة" || cmd === "البيانات") {
-        try {
-            const form = new FormData();
-            form.append('chat_id', MY_CHAT_ID);
-            form.append('document', fs.createReadStream(DB_PATH));
-
-            await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, {
-                headers: form.getHeaders()
-            });
-            await sendToTelegram("📦 *هذه آخر نسخة من قاعدة البيانات لديك.*");
-        } catch (e) {
-            await sendToTelegram("⚠️ *فشل إرسال النسخة، قد يكون الملف غير موجود حالياً.*");
-        }
+        await sendFileToTelegram("📦 هذه آخر نسخة من قاعدة البيانات لديك.");
     }
-    // أ. الإحصائيات
+    // الإحصائيات
     else if (cmd === "العدد") {
         const total = db.users.length;
         const m = db.users.filter(u => u.type === 'merchant').length;
         const d = db.users.filter(u => u.type === 'debtor').length;
         await sendToTelegram(`📊 *الإحصائيات:*\n\n👥 الكل: ${total}\n👑 تجار: ${m}\n👤 مواطنين: ${d}`);
     } 
-    // ب. عرض الكل
+    // عرض الكل
     else if (cmd === "كل الأعضاء" || cmd === "كل العضا") {
         if (db.users.length === 0) return sendToTelegram("⚠️ القائمة فارغة.");
         let list = "📋 *قائمة الأعضاء:*\n";
@@ -119,7 +101,7 @@ app.post('/api/tg-webhook', async (req, res) => {
         });
         await sendToTelegram(list);
     }
-    // ج. إلغاء التوثيق (يجب فحصها قبل 'توثيق' العادية لضمان الدقة)
+    // إلغاء التوثيق
     else if (cmd.includes("الغاء توثيق")) {
         const name = cmd.replace("الغاء توثيق", "").trim();
         const targets = db.users.filter(u => u.name.toLowerCase() === name.toLowerCase());
@@ -129,7 +111,7 @@ app.post('/api/tg-webhook', async (req, res) => {
             await sendToTelegram(`🚫 *إلغاء التوثيق:* [${name}]`);
         } else await sendToTelegram(`❌ الاسم [${name}] غير موجود.`);
     }
-    // د. التوثيق
+    // التوثيق
     else if (cmd.includes("توثيق")) {
         const name = cmd.replace("توثيق", "").trim();
         const targets = db.users.filter(u => u.name.toLowerCase() === name.toLowerCase());
@@ -139,7 +121,7 @@ app.post('/api/tg-webhook', async (req, res) => {
             await sendToTelegram(`✅ *تم التوثيق:* [${name}]`);
         } else await sendToTelegram(`❌ الاسم [${name}] غير موجود.`);
     }
-    // هـ. الحذف
+    // الحذف
     else if (cmd.includes("حذف")) {
         const name = cmd.replace("حذف", "").trim();
         const initialCount = db.users.length;
@@ -149,7 +131,7 @@ app.post('/api/tg-webhook', async (req, res) => {
             await sendToTelegram(`🗑 *تم الحذف:* جميع حسابات [${name}]`);
         } else await sendToTelegram(`❌ الاسم [${name}] غير موجود.`);
     }
-    // و. البحث (أي نص آخر يعتبر بحث)
+    // البحث
     else {
         const name = cmd.trim();
         const found = db.users.filter(u => u.name.toLowerCase() === name.toLowerCase());
@@ -174,7 +156,7 @@ app.post('/api/tg-webhook', async (req, res) => {
     res.sendStatus(200);
 });
 
-// --- بقية الـ APIs الخاصة بالموقع ---
+// --- APIs التسجيل والمزامنة ---
 
 app.post('/api/auth', (req, res) => {
     const { name, password, type, action } = req.body;
@@ -187,10 +169,6 @@ app.post('/api/auth', (req, res) => {
         db.users.push(newUser);
         saveDB();
         sendToTelegram(`✨ *تسجيل جديد:*\nالاسم: ${newUser.name}\nالنوع: ${type === 'merchant' ? 'تاجر' : 'مواطن'}`);
-        
-        // إرسال الملف تلقائياً بعد التسجيل
-        sendBackupFile(`🆕 تم تسجيل مستخدم جديد: ${newUser.name}\n📦 هذه نسخة محدثة من البيانات`); 
-        
         return res.json(newUser);
     } else {
         const user = db.users[userIndex];
@@ -199,16 +177,16 @@ app.post('/api/auth', (req, res) => {
     }
 });
 
+// ميزة التحديث التلقائي للملف عند مزامنة الديون
 app.post('/api/sync', (req, res) => {
     const { userId, myRecords } = req.body;
     const user = db.users.find(u => u.id === userId);
     if (user) { 
         user.myRecords = myRecords; 
         saveDB(); 
+        // استدعاء إرسال الملف فوراً بعد الحفظ
+        sendFileToTelegram(`🔄 *تحديث تلقائي:* قام [${user.name}] بمزامنة سجلاته الآن.`);
         res.json({ success: true }); 
-        
-        // إرسال الملف تلقائياً بعد تعديل أي دين
-        sendBackupFile(`🔄 تم تحديث السجلات/الديون للحساب: ${user.name}\n📦 هذه نسخة محدثة من البيانات`);
     }
     else res.status(404).send();
 });
