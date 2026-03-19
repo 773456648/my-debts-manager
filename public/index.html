@@ -352,6 +352,10 @@
                             <h3 id="active-target-name" class="text-2xl md:text-3xl font-black text-white flex items-center"></h3>
                         </div>
                         
+                        <div id="citizen-bulk-actions" class="hidden">
+                            <button onclick="approveAllOps()" class="bg-green-600/20 text-green-400 border border-green-500/40 px-4 py-2 rounded-xl text-xs font-bold hover:bg-green-600 hover:text-white transition">تأكيد جميع العمليات الجديدة ✅</button>
+                        </div>
+
                         <div class="flex gap-3 md:gap-5 bg-black/40 p-3 rounded-xl border border-white/5">
                             <div class="text-center">
                                 <span class="block text-[10px] text-gray-500 mb-1">يمني</span>
@@ -434,50 +438,33 @@
     <div id="settings-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
         <div class="glass-card modal-content w-full max-w-md p-8 space-y-6 relative">
             <button onclick="closeModal('settings-modal')" class="absolute top-4 left-4 text-gray-500 hover:text-white transition text-xl">✕</button>
-            
             <div class="text-center mb-6">
                 <span class="text-4xl mb-2 block">🛡️</span>
                 <h3 class="text-xl font-bold gold-text">إعدادات الحماية الملكية</h3>
-                <p class="text-xs text-gray-400 mt-1">قم بتحديث بيانات الدخول الخاصة بك</p>
             </div>
-            
             <div class="space-y-5">
-                <div class="relative">
-                    <label class="block text-xs text-gray-400 mb-1 ml-1">كلمة المرور الجديدة</label>
-                    <input id="new-pass" type="password" placeholder="••••••••" class="pr-10">
-                    <button onclick="togglePass('new-pass')" class="absolute left-4 top-[38px] opacity-40 hover:opacity-100 transition outline-none">👁️</button>
-                </div>
-                <div class="relative">
-                    <label class="block text-xs text-gray-400 mb-1 ml-1">تأكيد كلمة المرور</label>
-                    <input id="confirm-pass" type="password" placeholder="••••••••" class="pr-10">
-                    <button onclick="togglePass('confirm-pass')" class="absolute left-4 top-[38px] opacity-40 hover:opacity-100 transition outline-none">👁️</button>
-                </div>
+                <input id="new-pass" type="password" placeholder="كلمة المرور الجديدة" class="pr-10">
+                <input id="confirm-pass" type="password" placeholder="تأكيد كلمة المرور" class="pr-10">
             </div>
-            
             <div class="flex gap-4 pt-2">
-                <button id="btn-update-pass" onclick="updatePassword()" class="gold-btn flex-grow py-3 rounded-xl">تحديث الآن</button>
-                <button onclick="closeModal('settings-modal')" class="bg-zinc-800 px-6 py-3 rounded-xl text-white border border-white/5 hover:bg-zinc-700 transition">إلغاء</button>
+                <button onclick="updatePassword()" class="gold-btn flex-grow py-3 rounded-xl">تحديث الآن</button>
+                <button onclick="closeModal('settings-modal')" class="bg-zinc-800 px-6 py-3 rounded-xl text-white">إلغاء</button>
             </div>
         </div>
     </div>
 
     <script>
-        // المتغيرات الأساسية
         let user = null; 
         let activeTarget = null; 
         let userType = 'merchant'; 
         let discoveredData = [];
         let userStatuses = {}; 
 
-        // ----------------------------------------------------------------
-        // دوال مساعدة للواجهة (UI Helpers)
-        // ----------------------------------------------------------------
-
         function showToast(message, type = 'error') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
-            const icon = type === 'success' ? '✅' : (type === 'error' ? '⚠️' : 'ℹ️');
+            const icon = type === 'success' ? '✅' : '⚠️';
             toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
             container.appendChild(toast);
             setTimeout(() => toast.classList.add('show'), 10);
@@ -492,67 +479,34 @@
             input.type = input.type === 'password' ? 'text' : 'password';
         }
 
-        function updateOpType(val) {
-            document.getElementById('op-type').value = val;
-        }
-
-        function openModal(id) { 
-            document.getElementById(id).classList.add('show'); 
-        }
-        function closeModal(id) { 
-            document.getElementById(id).classList.remove('show'); 
-            if(id === 'settings-modal') {
-                document.getElementById('new-pass').value = '';
-                document.getElementById('confirm-pass').value = '';
-            }
-        }
-
+        function updateOpType(val) { document.getElementById('op-type').value = val; }
+        function openModal(id) { document.getElementById(id).classList.add('show'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('show'); }
         function setType(t) { 
             userType = t; 
             document.getElementById('sel-merchant').classList.toggle('active', t === 'merchant'); 
             document.getElementById('sel-debtor').classList.toggle('active', t === 'debtor'); 
         }
 
-        // ----------------------------------------------------------------
-        // الدوال الحسابية والمنطقية
-        // ----------------------------------------------------------------
-
         function formatAr(num) {
             if (num == 0) return "صفر";
             const units = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
             const tens = ["", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
             const hundreds = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"];
-            
             function conv(n) {
                 let r = ""; const h = Math.floor(n / 100); const t = n % 100;
                 if (h > 0) r += hundreds[h];
                 if (t > 0) { 
                     if (r !== "") r += " و "; 
                     if (t < 20) r += units[t]; 
-                    else { 
-                        const s = t % 10; 
-                        const ten = Math.floor(t / 10); 
-                        if (s > 0) r += units[s] + " و "; 
-                        r += tens[ten]; 
-                    } 
+                    else { const s = t % 10; const ten = Math.floor(t / 10); if (s > 0) r += units[s] + " و "; r += tens[ten]; } 
                 }
                 return r;
             }
-            
-            let res = ""; 
-            const m = Math.floor(num / 1000000); 
-            const th = Math.floor((num % 1000000) / 1000); 
-            const rem = num % 1000;
-            
+            let res = ""; const m = Math.floor(num / 1000000); const th = Math.floor((num % 1000000) / 1000); const rem = num % 1000;
             if (m > 0) res += (m === 1 ? "مليون" : (m === 2 ? "مليونان" : conv(m) + " ملايين"));
-            if (th > 0) { 
-                if (res !== "") res += " و "; 
-                res += (th === 1 ? "ألف" : (th === 2 ? "ألفين" : conv(th) + " آلاف")); 
-            }
-            if (rem > 0) { 
-                if (res !== "") res += " و "; 
-                res += conv(rem); 
-            }
+            if (th > 0) { if (res !== "") res += " و "; res += (th === 1 ? "ألف" : (th === 2 ? "ألفين" : conv(th) + " آلاف")); }
+            if (rem > 0) { if (res !== "") res += " و "; res += conv(rem); }
             return res;
         }
 
@@ -562,171 +516,82 @@
             document.getElementById('tafqit-text').innerText = val > 0 ? "فقط " + formatAr(parseInt(val)) + " " + cur + " لا غير." : "";
         }
 
-        // ----------------------------------------------------------------
-        // دوال الربط مع السيرفر والعمليات الأساسية
-        // ----------------------------------------------------------------
-
         window.onload = () => { 
             const saved = localStorage.getItem('heiba_auth_session'); 
-            if (saved) { 
-                user = JSON.parse(saved); 
-                start(); 
-            } 
+            if (saved) { user = JSON.parse(saved); start(); } 
         };
 
         async function doAuth(action) {
             const name = document.getElementById('u-name').value.trim();
             const password = document.getElementById('u-pass').value;
-            
-            if(!name || !password) {
-                showToast("الرجاء إدخال الاسم وكلمة المرور", "error");
-                return;
-            }
-
+            if(!name || !password) return showToast("الرجاء إدخال البيانات", "error");
             try {
-                const res = await fetch('/api/auth', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ name, password, type: userType, action }) 
-                });
+                const res = await fetch('/api/auth', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, password, type: userType, action }) });
                 const data = await res.json();
-                
-                if(res.ok) { 
-                    user = data; 
-                    if(document.getElementById('remember-me').checked) {
-                        localStorage.setItem('heiba_auth_session', JSON.stringify(user)); 
-                    }
-                    showToast("تم الدخول بنجاح", "success");
-                    start(); 
-                } else {
-                    showToast(data.error || "حدث خطأ غير معروف", "error");
-                }
+                if(res.ok) { user = data; start(); } else { showToast(data.error); }
             } catch (e) {
                 user = { id: Date.now(), name: name, type: userType, myRecords: [], verified: false };
-                if(document.getElementById('remember-me').checked) localStorage.setItem('heiba_auth_session', JSON.stringify(user));
-                showToast("تم الدخول (وضع المحاكاة)", "success");
                 start();
             }
+            if(document.getElementById('remember-me').checked) localStorage.setItem('heiba_auth_session', JSON.stringify(user));
         }
 
-        // دالة لجلب حالات التسجيل والتوثيق للأسماء مع المزامنة اللحظية
         async function fetchStatuses(names) {
             if(!names || names.length === 0) return;
             try {
-                const res = await fetch('/api/check-status', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ names, requesterId: user.id })
-                });
+                const res = await fetch('/api/check-status', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ names, requesterId: user.id }) });
                 const data = await res.json();
-                
-                // تحديث حالة المستخدم الحالي نفسه (للتوثيق)
-                if(data.requesterStatus && data.requesterStatus.verified !== user.verified) {
-                    user.verified = data.requesterStatus.verified;
-                    const nameHtml = user.verified ? `<span class="verified-name-glow">${user.name}</span>` : user.name;
-                    const userVerifyBadge = user.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-                    document.getElementById('display-name').innerHTML = `${nameHtml} ${userVerifyBadge}`;
-                }
-
-                // تحديث قائمة العملاء
                 userStatuses = {...userStatuses, ...data.statuses};
-                if(user.type === 'merchant') {
-                    renderList();
-                    if(activeTarget) {
-                        const status = userStatuses[activeTarget] || {};
-                        const targetNameHtml = status.verified ? `<span class="verified-name-glow">${activeTarget}</span>` : activeTarget;
-                        const verifyBadge = status.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-                        document.getElementById('active-target-name').innerHTML = `${targetNameHtml} ${verifyBadge}`;
-                    }
-                }
+                if(user.type === 'merchant') renderList();
             } catch(e) {}
         }
 
         function start() {
             document.getElementById('auth-ui').classList.add('hidden'); 
             document.getElementById('main-ui').classList.remove('hidden');
-            
             const nameHtml = user.verified ? `<span class="verified-name-glow">${user.name}</span>` : user.name;
-            const userVerifyBadge = user.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-            document.getElementById('display-name').innerHTML = `${nameHtml} ${userVerifyBadge}`;
+            document.getElementById('display-name').innerHTML = nameHtml;
             document.getElementById('role-tag').innerText = user.type === 'merchant' ? '🏪 رتبة تاجر' : '👤 رتبة مواطن';
             
-            // نظام المزامنة اللحظية (كل 4 ثواني)
             setInterval(() => {
-                if(user.type === 'merchant') {
-                    const targets = [...new Set(user.myRecords.map(r => r.targetName))];
-                    if(activeTarget && !targets.includes(activeTarget)) targets.push(activeTarget);
-                    fetchStatuses(targets);
-                } else {
-                    fetchStatuses([user.name]);
-                }
-            }, 4000);
+                let targets = (user.type === 'merchant') ? [...new Set(user.myRecords.map(r => r.targetName))] : [user.name];
+                fetchStatuses(targets);
+            }, 5000);
 
             if(user.type === 'merchant') { 
                 document.getElementById('merchant-tools').classList.remove('hidden'); 
                 document.getElementById('add-form').classList.remove('hidden'); 
-                renderList(); 
-                calculateGrand(user.myRecords); 
+                renderList(); calculateGrand(user.myRecords); 
             } else { 
-                fetchAutoDebts(); 
-                setInterval(fetchAutoDebts, 4000); 
+                fetchAutoDebts(); setInterval(fetchAutoDebts, 4000); 
             }
         }
 
         function calculateGrand(recs) {
             let y=0, u=0, s=0; 
             recs.forEach(r => { 
-                const a = parseFloat(r.amount); 
-                const d = r.type === 'دين'; 
-                if(r.currency === 'YER') y += d?a:-a; 
-                else if(r.currency === 'USD') u += d?a:-a; 
-                else s += d?a:-a; 
+                const a = parseFloat(r.amount); const d = r.type === 'دين'; 
+                if(r.currency === 'YER') y += d?a:-a; else if(r.currency === 'USD') u += d?a:-a; else s += d?a:-a; 
             });
-            
-            const formatBal = (val) => {
-                const numStr = Math.abs(val).toLocaleString();
-                if(val > 0) return `<span class="text-red-400" dir="ltr">- ${numStr}</span>`; 
-                if(val < 0) return `<span class="text-green-400" dir="ltr">+ ${numStr}</span>`; 
-                return `<span class="text-gray-500">0</span>`;
-            };
-
-            document.getElementById('gt-yer').innerHTML = formatBal(y); 
-            document.getElementById('gt-usd').innerHTML = formatBal(u); 
-            document.getElementById('gt-sar').innerHTML = formatBal(s);
+            const fmt = (v) => v > 0 ? `<span class="text-red-400">-${Math.abs(v).toLocaleString()}</span>` : (v < 0 ? `<span class="text-green-400">+${Math.abs(v).toLocaleString()}</span>` : '0');
+            document.getElementById('gt-yer').innerHTML = fmt(y); 
+            document.getElementById('gt-usd').innerHTML = fmt(u); 
+            document.getElementById('gt-sar').innerHTML = fmt(s);
         }
 
         function addTarget() { 
             const n = document.getElementById('target-search').value.trim(); 
-            if(!n) return; 
-            activeTarget = n; 
-            fetchStatuses([n]); 
-            showDetails(n); 
-            renderList(); 
-            document.getElementById('target-search').value = ""; 
+            if(!n) return; activeTarget = n; showDetails(n); renderList(); document.getElementById('target-search').value = ""; 
         }
 
         function renderList() {
             const t = [...new Set(user.myRecords.map(r => r.targetName))];
-            if(t.length === 0 && !activeTarget) {
-                document.getElementById('main-list').innerHTML = `<p class="text-xs text-center text-gray-500 mt-4 italic">لا يوجد حسابات مسجلة بعد.</p>`;
-                return;
-            }
-            // دمج الحساب النشط حالياً إذا لم يكن في السجلات
             if(activeTarget && !t.includes(activeTarget)) t.push(activeTarget);
-
             document.getElementById('main-list').innerHTML = t.map(n => {
-                const status = userStatuses[n] || { registered: false, verified: false };
-                const nHtml = status.verified ? `<span class="verified-name-glow">${n}</span>` : n;
-                const regBadge = status.registered ? '<span class="text-[9px] bg-green-900/40 text-green-400 px-1.5 py-0.5 rounded border border-green-500/30">مسجل</span>' : '<span class="text-[9px] bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">غير مسجل</span>';
-                const verifyBadge = status.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-
-                return `
-                <div onclick="showDetails('${n}')" class="p-4 bg-zinc-900/50 rounded-xl cursor-pointer border border-white/5 hover:border-[#d4af37]/50 hover:bg-zinc-800 transition flex items-center gap-3 ${activeTarget === n ? 'border-[#d4af37] bg-zinc-800 shadow-md' : ''}">
-                    <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-white/10">👤</div>
-                    <div class="font-bold text-sm flex-grow">
-                        <div class="flex items-center">${nHtml} ${verifyBadge}</div>
-                        <div class="mt-1">${regBadge}</div>
-                    </div>
+                const s = userStatuses[n] || { registered: false, verified: false };
+                return `<div onclick="showDetails('${n}')" class="p-4 bg-zinc-900/50 rounded-xl cursor-pointer border border-white/5 hover:border-[#d4af37] ${activeTarget === n ? 'border-[#d4af37] bg-zinc-800' : ''}">
+                    <div class="font-bold text-sm">${s.verified ? `<span class="verified-name-glow">${n}</span>` : n}</div>
+                    <div class="text-[10px] text-gray-500">${s.registered ? '✅ مسجل' : '❌ غير مسجل'}</div>
                 </div>`;
             }).join('');
         }
@@ -735,26 +600,14 @@
             try {
                 const res = await fetch(`/api/auto-discover?debtorName=${encodeURIComponent(user.name)}`);
                 discoveredData = await res.json();
-            } catch(e) { if(!discoveredData.length) discoveredData = []; }
-
-            let all = []; 
-            discoveredData.forEach(m => all = all.concat(m.records)); 
-            calculateGrand(all);
-            
-            if(discoveredData.length === 0) {
-                document.getElementById('main-list').innerHTML = `<p class="text-xs text-center text-gray-500 mt-4 italic">لا يوجد مطالبات.</p>`;
-            } else {
-                document.getElementById('main-list').innerHTML = discoveredData.map(m => {
-                    const mHtml = m.merchantVerified ? `<span class="verified-name-glow">${m.merchantName}</span>` : m.merchantName;
-                    const verifyBadge = m.merchantVerified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-                    return `
-                    <div onclick="showDetails('${m.merchantName}')" class="p-4 bg-zinc-900 border border-blue-900/30 rounded-xl mb-2 hover:border-blue-500 transition cursor-pointer flex justify-between items-center ${activeTarget === m.merchantName ? 'border-blue-500 bg-zinc-800' : ''}">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-blue-900/50">🏪</div>
-                            <p class="font-bold text-sm flex items-center">${mHtml} ${verifyBadge}</p>
-                        </div>
-                    </div>`;
-                }).join('');
+            } catch(e) { if(!discoveredData) discoveredData = []; }
+            let all = []; discoveredData.forEach(m => all = all.concat(m.records)); calculateGrand(all);
+            if(user.type === 'debtor') {
+                document.getElementById('main-list').innerHTML = discoveredData.map(m => `
+                <div onclick="showDetails('${m.merchantName}')" class="p-4 bg-zinc-900 border border-blue-900/30 rounded-xl mb-2 hover:border-blue-500 cursor-pointer flex justify-between items-center ${activeTarget === m.merchantName ? 'border-blue-500 bg-zinc-800' : ''}">
+                    <p class="font-bold text-sm">${m.merchantVerified ? `<span class="verified-name-glow">${m.merchantName}</span>` : m.merchantName}</p>
+                    ${m.records.some(r => !r.approved) ? '<span class="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>' : ''}
+                </div>`).join('');
             }
             if(activeTarget) showDetails(activeTarget);
         }
@@ -763,76 +616,108 @@
             activeTarget = name; 
             document.getElementById('empty-hint').classList.add('hidden'); 
             document.getElementById('details-pane').classList.remove('hidden');
-            
-            let verifyBadge = '';
-            let nameHtml = name;
-            if (user.type === 'merchant') {
-                const status = userStatuses[name] || {};
-                if(status.verified) nameHtml = `<span class="verified-name-glow">${name}</span>`;
-                verifyBadge = status.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-            } else {
-                const m = discoveredData.find(m => m.merchantName === name);
-                if(m && m.merchantVerified) nameHtml = `<span class="verified-name-glow">${name}</span>`;
-                verifyBadge = (m && m.merchantVerified) ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-            }
-            document.getElementById('active-target-name').innerHTML = `${nameHtml} ${verifyBadge}`;
+            document.getElementById('active-target-name').innerText = name;
             
             let records = (user.type === 'merchant') ? user.myRecords.filter(r => r.targetName === name) : (discoveredData.find(m => m.merchantName === name)?.records || []);
-            let y=0, u=0, s=0;
             
-            if(records.length === 0) {
-                document.getElementById('ops-list').innerHTML = `<div class="p-8 text-center text-gray-500 italic text-sm border border-dashed border-white/10 rounded-xl">لا توجد عمليات.</div>`;
+            // إظهار زر "تأكيد الكل" للمواطن إذا كان هناك عمليات غير مؤكدة
+            if(user.type === 'debtor' && records.some(r => !r.approved)) {
+                document.getElementById('citizen-bulk-actions').classList.remove('hidden');
             } else {
-                document.getElementById('ops-list').innerHTML = records.map(r => {
-                    const a = parseFloat(r.amount); const d = r.type === 'دين'; 
-                    if(r.currency === 'YER') y += d?a:-a; else if(r.currency === 'USD') u += d?a:-a; else s += d?a:-a; 
-                    return `
-                        <div class="p-4 ${d ? 'bg-red-900/10 border-red-900/50' : 'bg-green-900/10 border-green-900/50'} rounded-xl border-r-4 flex justify-between items-center">
-                            <div>
-                                <p class="font-bold text-sm text-gray-200">${r.note || (d ? 'تسجيل دين' : 'تسجيل سداد')}</p>
-                                <p class="text-[10px] text-gray-500">${new Date(r.date).toLocaleDateString('ar-YE')}</p>
-                            </div>
-                            <div class="text-left" dir="ltr">
-                                <p class="text-xl font-black ${d ? 'text-red-400' : 'text-green-400'}">${d ? '+' : '-'} ${a.toLocaleString()}</p>
-                                <p class="text-[10px] opacity-60 uppercase font-bold">${r.currency}</p>
-                            </div>
-                        </div>`;
-                }).reverse().join(''); 
+                document.getElementById('citizen-bulk-actions').classList.add('hidden');
             }
 
-            document.getElementById('dt-yer').innerText = Math.abs(y).toLocaleString(); 
-            document.getElementById('dt-yer').className = `text-sm font-bold ${y > 0 ? 'text-red-400' : (y < 0 ? 'text-green-400' : 'text-gray-500')}`;
-            document.getElementById('dt-usd').innerText = Math.abs(u).toLocaleString(); 
-            document.getElementById('dt-usd').className = `text-sm font-bold ${u > 0 ? 'text-red-400' : (u < 0 ? 'text-green-400' : 'text-gray-500')}`;
-            document.getElementById('dt-sar').innerText = Math.abs(s).toLocaleString();
-            document.getElementById('dt-sar').className = `text-sm font-bold ${s > 0 ? 'text-red-400' : (s < 0 ? 'text-green-400' : 'text-gray-500')}`;
+            let y=0, u=0, s=0;
+            document.getElementById('ops-list').innerHTML = records.map(r => {
+                const a = parseFloat(r.amount); const d = r.type === 'دين'; 
+                if(r.currency === 'YER') y += d?a:-a; else if(r.currency === 'USD') u += d?a:-a; else s += d?a:-a; 
+                
+                // زر التأكيد للمواطن فقط
+                const showApproveBtn = (user.type === 'debtor' && !r.approved);
+                
+                return `
+                <div class="p-4 ${d ? 'bg-red-900/10 border-red-900/50' : 'bg-green-900/10 border-green-900/50'} rounded-xl border-r-4 flex justify-between items-center">
+                    <div class="flex-grow">
+                        <p class="font-bold text-sm text-gray-200">${r.note || (d ? 'دين' : 'سداد')} 
+                            ${r.approved ? '<span class="text-[10px] text-green-500 mr-2">✓ تمت مراجعتها</span>' : '<span class="text-[10px] text-yellow-500 mr-2">⏳ قيد الانتظار</span>'}
+                        </p>
+                        <p class="text-[10px] text-gray-500">${new Date(r.date).toLocaleDateString('ar-YE')}</p>
+                        ${showApproveBtn ? `<button onclick="approveOp('${r.id}')" class="mt-2 bg-green-600 text-white text-[10px] px-3 py-1 rounded-lg font-bold">إضغط للتأكيد ✅</button>` : ''}
+                    </div>
+                    <div class="text-left" dir="ltr">
+                        <p class="text-xl font-black ${d ? 'text-red-400' : 'text-green-400'}">${d ? '+' : '-'} ${a.toLocaleString()}</p>
+                        <p class="text-[10px] opacity-60 uppercase font-bold">${r.currency}</p>
+                    </div>
+                </div>`;
+            }).reverse().join(''); 
 
+            const fmtBal = (v) => `<span class="font-bold ${v > 0 ? 'text-red-400' : (v < 0 ? 'text-green-400' : 'text-gray-500')}">${Math.abs(v).toLocaleString()}</span>`;
+            document.getElementById('dt-yer').innerHTML = fmtBal(y); 
+            document.getElementById('dt-usd').innerHTML = fmtBal(u); 
+            document.getElementById('dt-sar').innerHTML = fmtBal(s);
             if(user.type === 'merchant') renderList();
+        }
+
+        // --- ميزة التأكيد الجديدة للمواطن ---
+        async function approveOp(opId) {
+            if(user.type !== 'debtor') return;
+            try {
+                // نرسل الطلب للسيرفر لتحديث حالة العملية إلى "مؤكدة"
+                await fetch('/api/approve-op', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ debtorId: user.id, merchantName: activeTarget, opId: opId })
+                });
+                showToast("تم تأكيد العملية بنجاح", "success");
+            } catch(e) {
+                // محاكاة في حال عدم وجود سيرفر
+                let merchant = discoveredData.find(m => m.merchantName === activeTarget);
+                if(merchant) {
+                    let op = merchant.records.find(r => r.id == opId);
+                    if(op) op.approved = true;
+                }
+                showToast("تم التأكيد (وضع محلي)", "success");
+            }
+            showDetails(activeTarget);
+        }
+
+        async function approveAllOps() {
+            if(user.type !== 'debtor') return;
+            try {
+                await fetch('/api/approve-all', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ debtorId: user.id, merchantName: activeTarget })
+                });
+            } catch(e) {
+                let merchant = discoveredData.find(m => m.merchantName === activeTarget);
+                if(merchant) merchant.records.forEach(r => r.approved = true);
+            }
+            showToast("تم تأكيد جميع العمليات", "success");
+            showDetails(activeTarget);
         }
 
         async function saveOp() {
             const a = document.getElementById('op-amt').value; 
-            if(!a || !activeTarget || parseFloat(a) <= 0) { showToast("الرجاء إدخال مبلغ صحيح", "error"); return; }
+            if(!a || !activeTarget || parseFloat(a) <= 0) return showToast("أدخل مبلغاً صحيحاً");
             const newRecord = { 
                 id: Date.now(), targetName: activeTarget, amount: a, currency: document.getElementById('op-cur').value, 
-                type: document.getElementById('op-type').value, note: document.getElementById('op-note').value, date: new Date().toISOString() 
+                type: document.getElementById('op-type').value, note: document.getElementById('op-note').value, 
+                date: new Date().toISOString(), approved: false // افتراضياً غير مؤكدة حتى يوافق المواطن
             };
             user.myRecords.push(newRecord);
             showDetails(activeTarget); calculateGrand(user.myRecords);
             try { fetch('/api/sync', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ userId: user.id, myRecords: user.myRecords }) }); } catch(e) {}
-            showToast("تم تثبيت العملية بنجاح", "success");
-            document.getElementById('op-amt').value = ""; document.getElementById('op-note').value = ""; document.getElementById('tafqit-text').innerText = "";
             localStorage.setItem('heiba_auth_session', JSON.stringify(user));
+            showToast("تم التسجيل، بانتظار تأكيد المواطن", "success");
+            document.getElementById('op-amt').value = ""; document.getElementById('op-note').value = "";
         }
 
         async function updatePassword() {
-            const p1 = document.getElementById('new-pass').value; const p2 = document.getElementById('confirm-pass').value;
-            if(!p1) return showToast("الرجاء إدخال كلمة مرور", "error");
-            if(p1 !== p2) return showToast("كلمتا المرور غير متطابقتين", "error");
-            try {
-                const res = await fetch('/api/update-pass', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ userId: user.id, newPass: p1 }) });
-                if(res.ok) { user.password = p1; showToast("تم التحديث!", "success"); closeModal('settings-modal'); }
-            } catch(e) { user.password = p1; localStorage.setItem('heiba_auth_session', JSON.stringify(user)); showToast("تم التحديث!", "success"); closeModal('settings-modal'); }
+            const p1 = document.getElementById('new-pass').value;
+            if(p1 !== document.getElementById('confirm-pass').value) return showToast("السر غير متطابق");
+            user.password = p1; localStorage.setItem('heiba_auth_session', JSON.stringify(user));
+            showToast("تم التحديث بنجاح", "success"); closeModal('settings-modal');
         }
 
         function logout() { localStorage.removeItem('heiba_auth_session'); location.reload(); }
