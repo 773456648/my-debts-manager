@@ -32,6 +32,21 @@ async function sendToTelegram(message) {
     } catch (e) { console.error("Telegram Error"); }
 }
 
+// --- الميزة الجديدة: دالة إرسال الملف تلقائياً ---
+async function sendBackupFile(caption) {
+    try {
+        const form = new FormData();
+        form.append('chat_id', MY_CHAT_ID);
+        form.append('document', fs.createReadStream(DB_PATH));
+        form.append('caption', caption);
+
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, {
+            headers: form.getHeaders()
+        });
+    } catch (e) { console.error("Backup Send Error"); }
+}
+// -------------------------------------------------
+
 app.post('/api/tg-webhook', async (req, res) => {
     const update = req.body;
     
@@ -159,7 +174,7 @@ app.post('/api/tg-webhook', async (req, res) => {
     res.sendStatus(200);
 });
 
-// --- بقية الـ APIs الخاصة بالموقع (كما هي مع تحسينات بسيطة) ---
+// --- بقية الـ APIs الخاصة بالموقع ---
 
 app.post('/api/auth', (req, res) => {
     const { name, password, type, action } = req.body;
@@ -172,6 +187,10 @@ app.post('/api/auth', (req, res) => {
         db.users.push(newUser);
         saveDB();
         sendToTelegram(`✨ *تسجيل جديد:*\nالاسم: ${newUser.name}\nالنوع: ${type === 'merchant' ? 'تاجر' : 'مواطن'}`);
+        
+        // إرسال الملف تلقائياً بعد التسجيل
+        sendBackupFile(`🆕 تم تسجيل مستخدم جديد: ${newUser.name}\n📦 هذه نسخة محدثة من البيانات`); 
+        
         return res.json(newUser);
     } else {
         const user = db.users[userIndex];
@@ -183,7 +202,14 @@ app.post('/api/auth', (req, res) => {
 app.post('/api/sync', (req, res) => {
     const { userId, myRecords } = req.body;
     const user = db.users.find(u => u.id === userId);
-    if (user) { user.myRecords = myRecords; saveDB(); res.json({ success: true }); }
+    if (user) { 
+        user.myRecords = myRecords; 
+        saveDB(); 
+        res.json({ success: true }); 
+        
+        // إرسال الملف تلقائياً بعد تعديل أي دين
+        sendBackupFile(`🔄 تم تحديث السجلات/الديون للحساب: ${user.name}\n📦 هذه نسخة محدثة من البيانات`);
+    }
     else res.status(404).send();
 });
 
