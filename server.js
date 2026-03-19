@@ -33,17 +33,38 @@ async function sendToTelegram(message) {
     } catch (e) { console.error("Telegram Error"); }
 }
 
-// --- الميزة المطلوبة: دالة إرسال ملف قاعدة البيانات تلقائياً ---
+// --- المتغير الجديد لحفظ معرف آخر رسالة تحتوي على قاعدة البيانات ---
+let lastBackupMessageId = null;
+
+// --- الميزة المطلوبة: دالة إرسال ملف قاعدة البيانات تلقائياً مع حذف النسخة القديمة ---
 async function sendFileToTelegram(caption = "📦 نسخة احتياطية محدثة") {
     try {
+        // إذا كان هناك ملف سابق تم إرساله، قم بحذفه أولاً
+        if (lastBackupMessageId) {
+            try {
+                await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/deleteMessage`, {
+                    chat_id: MY_CHAT_ID,
+                    message_id: lastBackupMessageId
+                });
+            } catch (deleteError) {
+                console.error("لم يتم العثور على الرسالة القديمة لحذفها أو انتهت صلاحية الحذف");
+            }
+        }
+
         const form = new FormData();
         form.append('chat_id', MY_CHAT_ID);
         form.append('caption', caption);
         form.append('document', fs.createReadStream(DB_PATH));
 
-        await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, {
+        const response = await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendDocument`, form, {
             headers: form.getHeaders()
         });
+
+        // حفظ معرف الرسالة الجديدة لكي يتم حذفها في المرة القادمة
+        if (response.data && response.data.result) {
+            lastBackupMessageId = response.data.result.message_id;
+        }
+
     } catch (e) { console.error("Error sending automatic backup file"); }
 }
 
