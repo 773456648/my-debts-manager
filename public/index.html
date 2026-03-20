@@ -1,841 +1,814 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> منصة النظام المالي المتكامل</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Changa:wght@300;400;500;700;800&display=swap" rel="stylesheet">
-    <style>
-        /* المتغيرات والأساسيات */
-        :root {
-            --gold-primary: #d4af37;
-            --gold-light: #f3e5ab;
-            --gold-dark: #aa7c11;
-            --bg-dark: #0a0a0c;
-            --surface-dark: rgba(20, 20, 25, 0.7);
-        }
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, signInAnonymously, onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, deleteDoc, query, serverTimestamp 
+} from 'firebase/firestore';
+import { 
+  ShieldCheck, Shield, User, Store, LogOut, Settings, Plus, 
+  TrendingUp, TrendingDown, DollarSign, Wallet, Search, Bell, 
+  Activity, CheckCircle2, AlertCircle, X, ChevronRight, Users, 
+  Database, Trash2, FileText
+} from 'lucide-react';
 
-        body { 
-            background-color: var(--bg-dark); 
-            background-image: radial-gradient(circle at 50% 0%, rgba(212, 175, 55, 0.05) 0%, transparent 50%);
-            color: #f0f0f0; 
-            font-family: 'Changa', sans-serif; 
-            overflow-x: hidden; 
-            min-height: 100vh;
-        }
+// --- Firebase Initialization ---
+const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'heiba-app';
 
-        /* --- ميزة التوهج للموثقين --- */
-        .verified-name-glow {
-            background: linear-gradient(90deg, #ffffff, #22c55e, #ffffff);
-            background-size: 200% auto;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: verified-shimmer 3s linear infinite;
-            text-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
-            filter: drop-shadow(0 0 2px rgba(255,255,255,0.2));
-            display: inline-flex;
-            align-items: center;
-        }
+// --- Utility Functions ---
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-US').format(Math.abs(amount));
+};
 
-        @keyframes verified-shimmer {
-            to { background-position: 200% center; }
-        }
-        /* --------------------------- */
+const formatAr = (num) => {
+  if (num === 0) return "صفر";
+  const units = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
+  const tens = ["", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
+  const hundreds = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"];
+  
+  function conv(n) {
+      let r = ""; const h = Math.floor(n / 100); const t = n % 100;
+      if (h > 0) r += hundreds[h];
+      if (t > 0) { 
+          if (r !== "") r += " و "; 
+          if (t < 20) r += units[t]; 
+          else { 
+              const s = t % 10; 
+              const ten = Math.floor(t / 10); 
+              if (s > 0) r += units[s] + " و "; 
+              r += tens[ten]; 
+          } 
+      }
+      return r;
+  }
+  
+  let res = ""; 
+  const m = Math.floor(num / 1000000); 
+  const th = Math.floor((num % 1000000) / 1000); 
+  const rem = num % 1000;
+  
+  if (m > 0) res += (m === 1 ? "مليون" : (m === 2 ? "مليونان" : conv(m) + " ملايين"));
+  if (th > 0) { 
+      if (res !== "") res += " و "; 
+      res += (th === 1 ? "ألف" : (th === 2 ? "ألفين" : conv(th) + " آلاف")); 
+  }
+  if (rem > 0) { 
+      if (res !== "") res += " و "; 
+      res += conv(rem); 
+  }
+  return res;
+};
 
-        /* النصوص والأزرار الذهبية */
-        .gold-text { 
-            background: linear-gradient(to left, var(--gold-light), var(--gold-primary), var(--gold-dark));
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            text-shadow: 0px 2px 10px rgba(212, 175, 55, 0.1);
-        }
-        
-        .gold-btn { 
-            background: linear-gradient(135deg, var(--gold-primary), var(--gold-dark)); 
-            color: #000; 
-            font-weight: 700; 
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
-        }
-        .gold-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(212, 175, 55, 0.4);
-            filter: brightness(1.1);
-        }
+// --- Toast Component ---
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
 
-        /* البطاقات الزجاجية */
-        .glass-card { 
-            background: var(--surface-dark); 
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.05); 
-            border-radius: 24px; 
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            transition: transform 0.3s ease, border-color 0.3s ease;
-        }
+  return (
+    <div className={`fixed bottom-4 left-4 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl animate-in slide-in-from-bottom-5 fade-in duration-300 ${
+      type === 'error' ? 'bg-red-950/90 border border-red-500/50 text-red-200' :
+      type === 'success' ? 'bg-emerald-950/90 border border-emerald-500/50 text-emerald-200' :
+      'bg-slate-900/90 border border-amber-500/50 text-amber-200'
+    }`}>
+      {type === 'error' ? <AlertCircle size={20} className="text-red-500" /> : 
+       type === 'success' ? <CheckCircle2 size={20} className="text-emerald-500" /> : 
+       <Bell size={20} className="text-amber-500" />}
+      <span className="font-medium">{message}</span>
+    </div>
+  );
+};
 
-        /* حقول الإدخال */
-        input, select { 
-            background: rgba(0, 0, 0, 0.5) !important; 
-            border: 1px solid rgba(255, 255, 255, 0.1) !important; 
-            color: #fff; 
-            border-radius: 16px; 
-            padding: 16px; 
-            width: 100%; 
-            outline: none; 
-            transition: all 0.3s ease;
-        }
-        input:focus, select:focus {
-            border-color: var(--gold-primary) !important;
-            box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2);
-        }
+// --- Main Application ---
+export default function App() {
+  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [dbUsers, setDbUsers] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  
+  const [currentUser, setCurrentUser] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-        /* أزرار اختيار نوع الحساب */
-        .type-select { 
-            border: 2px solid rgba(255, 255, 255, 0.05); 
-            background: rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease; 
-            cursor: pointer; 
-        }
-        .type-select:hover {
-            border-color: rgba(212, 175, 55, 0.5);
-        }
-        .type-select.active { 
-            border-color: var(--gold-primary); 
-            background: rgba(212, 175, 55, 0.08); 
-            transform: scale(1.02);
-        }
+  const showToast = (msg, type = 'info') => setToast({ message: msg, type });
 
-        /* تنسيقات إضافية */
-        .info-section { 
-            background: rgba(255, 255, 255, 0.02); 
-            border: 1px solid rgba(255, 255, 255, 0.05); 
-            border-radius: 20px; 
-            padding: 24px; 
-            transition: all 0.3s ease;
-        }
-        .info-section:hover {
-            background: rgba(255, 255, 255, 0.04);
-            border-color: rgba(212, 175, 55, 0.2);
-        }
-        
-        .modal-backdrop { 
-            background: rgba(0,0,0,0.85); 
-            backdrop-filter: blur(10px); 
-            -webkit-backdrop-filter: blur(10px);
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.3s ease;
-        }
-        .modal-backdrop.show {
-            opacity: 1;
-            visibility: visible;
-        }
-        .modal-content {
-            transform: scale(0.95);
-            transition: all 0.3s ease;
-        }
-        .modal-backdrop.show .modal-content {
-            transform: scale(1);
-        }
+  // Initialize Auth
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        await signInAnonymously(auth);
+      } catch (error) {
+        console.error("Auth init error:", error);
+      }
+    };
+    initAuth();
+    
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setFirebaseUser(u);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-        /* ستايل التفقيط */
-        .tafqit-box { 
-            font-size: 12px; 
-            color: var(--gold-light); 
-            margin-top: 8px; 
-            margin-right: 12px; 
-            font-weight: 500; 
-        }
+  // Sync Data
+  useEffect(() => {
+    if (!firebaseUser) return;
 
-        /* نظام الإشعارات (Toast) */
-        #toast-container {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .toast {
-            min-width: 250px;
-            padding: 16px 20px;
-            border-radius: 12px;
-            background: rgba(15, 15, 20, 0.95);
-            border-right: 4px solid var(--gold-primary);
-            color: #fff;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            font-size: 14px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            transform: translateX(-120%);
-            transition: transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-        }
-        .toast.show { transform: translateX(0); }
-        .toast.error { border-right-color: #ef4444; }
-        .toast.success { border-right-color: #22c55e; }
+    const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'heiba_users');
+    const transRef = collection(db, 'artifacts', appId, 'public', 'data', 'heiba_transactions');
 
-        /* تجميل شريط التمرير */
+    const unsubUsers = onSnapshot(usersRef, (snap) => {
+      const usersData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setDbUsers(usersData);
+      
+      // Update current user session if data changes
+      if (currentUser) {
+        const updatedMe = usersData.find(u => u.name === currentUser.name && u.password === currentUser.password);
+        if (updatedMe) setCurrentUser(updatedMe);
+      }
+    }, (err) => console.error("Users sync error:", err));
+
+    const unsubTrans = onSnapshot(transRef, (snap) => {
+      setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => console.error("Trans sync error:", err));
+
+    return () => { unsubUsers(); unsubTrans(); };
+  }, [firebaseUser, currentUser]);
+
+  // Check Local Storage for session
+  useEffect(() => {
+    const savedUser = localStorage.getItem('heiba_session');
+    if (savedUser && dbUsers.length > 0 && !currentUser) {
+      const parsed = JSON.parse(savedUser);
+      const exists = dbUsers.find(u => u.name === parsed.name && u.password === parsed.password);
+      if (exists) setCurrentUser(exists);
+    }
+  }, [dbUsers]);
+
+
+  const handleLogin = async (name, password, type, action) => {
+    if (!name || !password) return showToast("الرجاء إدخال جميع البيانات", "error");
+    
+    // Admin Override
+    if (name === "المدير" && password === "1234") {
+      const adminUser = { name: "المدير", type: "admin", verified: true, role: "admin" };
+      setCurrentUser(adminUser);
+      return showToast("مرحباً بك في لوحة القيادة العليا", "success");
+    }
+
+    if (action === 'login') {
+      const user = dbUsers.find(u => u.name === name && u.password === password && u.type === type);
+      if (user) {
+        setCurrentUser(user);
+        localStorage.setItem('heiba_session', JSON.stringify(user));
+        showToast("تم الدخول بنجاح", "success");
+      } else {
+        showToast("بيانات الدخول غير صحيحة", "error");
+      }
+    } else {
+      const exists = dbUsers.find(u => u.name === name && u.type === type);
+      if (exists) return showToast("هذا الاسم مسجل مسبقاً بهذا النوع", "error");
+      
+      try {
+        const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'heiba_users');
+        const newUser = {
+          name, password, type, verified: false, createdAt: Date.now()
+        };
+        const docRef = await addDoc(usersRef, newUser);
+        const savedUser = { id: docRef.id, ...newUser };
+        setCurrentUser(savedUser);
+        localStorage.setItem('heiba_session', JSON.stringify(savedUser));
+        showToast("تم إنشاء الحساب بنجاح", "success");
+      } catch (err) {
+        showToast("حدث خطأ أثناء التسجيل", "error");
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('heiba_session');
+    showToast("تم تسجيل الخروج", "info");
+  };
+
+  if (isLoading) return <div className="min-h-screen bg-[#0a0a0c] flex items-center justify-center"><div className="w-16 h-16 border-4 border-[#d4af37] border-t-transparent rounded-full animate-spin"></div></div>;
+
+  return (
+    <div dir="rtl" className="min-h-screen bg-[#0a0a0c] text-slate-200 font-sans selection:bg-[#d4af37]/30" style={{ fontFamily: "'Changa', sans-serif" }}>
+      <style dangerouslySetInnerHTML={{__html: `
+        @import url('https://fonts.googleapis.com/css2?family=Changa:wght@300;400;500;700;800&display=swap');
+        .glass-panel { background: rgba(20, 20, 25, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .gold-gradient { background: linear-gradient(135deg, #f3e5ab, #d4af37, #aa7c11); -webkit-background-clip: text; color: transparent; }
+        .gold-bg { background: linear-gradient(135deg, #d4af37, #aa7c11); }
+        .verified-glow { text-shadow: 0 0 10px rgba(34, 197, 94, 0.5); }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(212, 175, 55, 0.3); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(212, 175, 55, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(212, 175, 55, 0.2); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(212, 175, 55, 0.5); }
+      `}} />
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {!currentUser ? (
+        <AuthScreen onAuth={handleLogin} />
+      ) : currentUser.type === 'admin' ? (
+        <AdminDashboard users={dbUsers} db={db} appId={appId} showToast={showToast} onLogout={handleLogout} />
+      ) : (
+        <MainDashboard 
+          user={currentUser} 
+          users={dbUsers} 
+          allTransactions={transactions} 
+          onLogout={handleLogout} 
+          db={db} 
+          appId={appId}
+          showToast={showToast}
+        />
+      )}
+    </div>
+  );
+}
+
+// --- Auth Screen ---
+const AuthScreen = ({ onAuth }) => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [type, setType] = useState('merchant');
+  const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Effects */}
+      <div className="absolute top-1/4 -right-64 w-96 h-96 bg-[#d4af37]/20 rounded-full blur-[120px] mix-blend-screen pointer-events-none"></div>
+      <div className="absolute bottom-1/4 -left-64 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px] mix-blend-screen pointer-events-none"></div>
+
+      <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center z-10">
         
-        /* تأثير الظهور الأولي */
-        .fade-in { animation: fadeIn 0.8s ease forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
-</head>
-<body class="p-4 md:p-8">
-
-    <div id="toast-container"></div>
-
-    <div id="auth-ui" class="max-w-6xl mx-auto mt-4 space-y-12 fade-in">
-        <div class="text-center space-y-2">
-            <h1 class="text-7xl md:text-8xl font-black gold-text italic tracking-tighter">HEIBA</h1>
-            <p class="text-xs md:text-sm text-gray-400 tracking-[0.3em] md:tracking-[0.5em] uppercase font-light">The Sovereign Financial Platform</p>
+        {/* Left Side - Brand */}
+        <div className="text-center lg:text-right space-y-6 animate-in slide-in-from-right-10 duration-700">
+          <div>
+            <h1 className="text-7xl md:text-9xl font-black gold-gradient tracking-tighter italic">HEIBA</h1>
+            <p className="text-sm md:text-base text-slate-400 tracking-[0.4em] uppercase font-light mt-2">المنصة المالية السيادية</p>
+          </div>
+          <div className="hidden lg:block space-y-4 pr-4 border-r-2 border-[#d4af37]/30 text-slate-400 text-sm leading-relaxed">
+            <p className="text-lg text-slate-300 font-medium">"أكلوا وشربوا وعلى الحق اتحاسبوا"</p>
+            <p>حلقة الوصل المالية الأكثر أماناً، دقة متناهية في تنظيم الديون، مزامنة فورية، وشفافية مطلقة بين التاجر والمواطن.</p>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12 items-center">
-            <div class="glass-card p-8 md:p-10 space-y-8 relative overflow-hidden">
-                <div class="absolute -top-24 -right-24 w-48 h-48 bg-yellow-600 rounded-full mix-blend-multiply filter blur-[80px] opacity-20"></div>
-                
-                <div class="text-center">
-                    <h2 class="text-2xl font-bold mb-1">تسجيل الدخول</h2>
-                    <p class="text-sm text-gray-500">اختر نوع الحساب وأدخل بياناتك للمتابعة</p>
-                </div>
+        {/* Right Side - Form */}
+        <div className="glass-panel p-8 md:p-10 rounded-3xl shadow-2xl animate-in slide-in-from-left-10 duration-700">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold text-white mb-2">{isLogin ? 'تسجيل الدخول' : 'إنشاء حساب سيادي'}</h2>
+            <p className="text-sm text-slate-400">حدد صفتك وادخل بياناتك للمتابعة</p>
+          </div>
 
-                <div class="grid grid-cols-2 gap-4">
-                    <div id="sel-merchant" onclick="setType('merchant')" class="type-select active p-4 md:p-5 rounded-2xl text-center flex flex-col items-center justify-center gap-2">
-                        <span class="text-3xl">🏪</span>
-                        <span class="text-sm font-bold">حساب تاجر</span>
-                    </div>
-                    <div id="sel-debtor" onclick="setType('debtor')" class="type-select p-4 md:p-5 rounded-2xl text-center flex flex-col items-center justify-center gap-2">
-                        <span class="text-3xl">👤</span>
-                        <span class="text-sm font-bold">حساب مواطن</span>
-                    </div>
-                </div>
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            <button 
+              onClick={() => setType('merchant')}
+              className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${type === 'merchant' ? 'border-[#d4af37] bg-[#d4af37]/10' : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'}`}
+            >
+              <Store className={type === 'merchant' ? 'text-[#d4af37]' : 'text-slate-500'} size={28} />
+              <span className={`text-sm font-bold ${type === 'merchant' ? 'text-white' : 'text-slate-400'}`}>حساب تاجر</span>
+            </button>
+            <button 
+              onClick={() => setType('debtor')}
+              className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${type === 'debtor' ? 'border-blue-500 bg-blue-500/10' : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'}`}
+            >
+              <User className={type === 'debtor' ? 'text-blue-500' : 'text-slate-500'} size={28} />
+              <span className={`text-sm font-bold ${type === 'debtor' ? 'text-white' : 'text-slate-400'}`}>حساب مواطن</span>
+            </button>
+          </div>
 
-                <div class="space-y-5">
-                    <div class="relative">
-                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">🧑‍💼</span>
-                        <input id="u-name" type="text" placeholder="الاسم الكامل للمستخدم" class="pr-12">
-                    </div>
-                    <div class="relative">
-                        <span class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">🔒</span>
-                        <input id="u-pass" type="password" placeholder="كلمة المرور الخاصة بك" class="pr-12">
-                        <button onclick="togglePass('u-pass')" class="absolute left-4 top-1/2 -translate-y-1/2 opacity-40 hover:opacity-100 transition text-xl outline-none">👁️</button>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-3 px-2">
-                    <input type="checkbox" id="remember-me" class="w-5 h-5 accent-[#d4af37] cursor-pointer rounded">
-                    <label for="remember-me" class="text-sm text-gray-400 cursor-pointer select-none hover:text-white transition">تذكرني (دخول تلقائي دائماً)</label>
-                </div>
-
-                <div class="grid grid-cols-2 gap-4 pt-2">
-                    <button onclick="doAuth('login')" class="bg-zinc-800 py-4 rounded-xl font-bold hover:bg-zinc-700 transition border border-white/5 hover:border-white/10 shadow-lg">تسجيل الدخول</button>
-                    <button onclick="doAuth('reg')" class="gold-btn py-4 rounded-xl">إنشاء حساب</button>
-                </div>
+          <div className="space-y-4 mb-8">
+            <div className="relative">
+              <User className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+              <input 
+                type="text" 
+                placeholder="الاسم الكامل" 
+                value={name} onChange={(e) => setName(e.target.value)}
+                className="w-full bg-slate-950/50 border border-slate-800 text-white rounded-xl py-4 pr-12 pl-4 focus:outline-none focus:border-[#d4af37] transition-colors"
+              />
             </div>
-
-            <div class="space-y-8 p-4">
-                <div>
-                    <h3 class="text-3xl font-black gold-text mb-4">ما هي فائدة المنصة؟</h3>
-                    <p class="text-gray-400 text-sm md:text-base leading-relaxed border-r-4 border-[#d4af37] pr-4 bg-white/5 p-4 rounded-l-xl">
-                        "أكلوا وشربوا وعلى الحق اتحاسبوا"<br>
-                        حلقة الوصل المالية الأكثر أماناً بين التاجر والمواطن، حيث تهدف إلى تنظيم الديون والحسابات المالية بدقة متناهية. تضمن المنصة لكل ذي حق حقه من خلال نظام رقابة ذاتي ومزامنة فورية تمنع الأخطاء البشرية.
-                    </p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div class="info-section">
-                        <div class="flex items-center gap-2 mb-3">
-                            <span class="text-xl">🏪</span>
-                            <h4 class="gold-text font-bold">للتاجر</h4>
-                        </div>
-                        <p class="text-gray-400 leading-relaxed text-xs">قم بإدارة المواطنين، سجل العمليات بالعملات الثلاث (يمني، دولار، سعودي)، وسيصلهم الإشعار فورياً في حساباتهم الخاصة.</p>
-                    </div>
-                    <div class="info-section">
-                        <div class="flex items-center gap-2 mb-3">
-                            <span class="text-xl">👥</span>
-                            <h4 class="gold-text font-bold">للمواطن</h4>
-                        </div>
-                        <p class="text-gray-400 leading-relaxed text-xs">تابع موقفك المالي الصافي مع التجار المعتمدين واطلع على كشوفات حسابك لحظياً دون الحاجة لمراجعة الدفاتر الورقية.</p>
-                    </div>
-                </div>
+            <div className="relative">
+              <ShieldCheck className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+              <input 
+                type="password" 
+                placeholder="كلمة المرور" 
+                value={password} onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-950/50 border border-slate-800 text-white rounded-xl py-4 pr-12 pl-4 focus:outline-none focus:border-[#d4af37] transition-colors"
+                onKeyDown={(e) => e.key === 'Enter' && onAuth(name, password, type, isLogin ? 'login' : 'reg')}
+              />
             </div>
+          </div>
+
+          <button 
+            onClick={() => onAuth(name, password, type, isLogin ? 'login' : 'reg')}
+            className="w-full gold-bg text-black font-bold text-lg py-4 rounded-xl shadow-[0_0_20px_rgba(212,175,55,0.3)] hover:scale-[1.02] transition-transform"
+          >
+            {isLogin ? 'دخول للمنصة' : 'تأكيد التسجيل'}
+          </button>
+
+          <div className="mt-6 text-center">
+            <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-slate-400 hover:text-white transition-colors">
+              {isLogin ? 'لا تملك حساباً؟ سجل الآن' : 'لديك حساب؟ سجل الدخول'}
+            </button>
+          </div>
         </div>
+      </div>
     </div>
+  );
+};
 
-    <div id="main-ui" class="hidden max-w-7xl mx-auto space-y-6 fade-in">
+// --- Main Dashboard (Merchant & Citizen) ---
+const MainDashboard = ({ user, users, allTransactions, onLogout, db, appId, showToast }) => {
+  const [activeTab, setActiveTab] = useState('overview');
+  const [selectedTarget, setSelectedTarget] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter transactions relevant to this user
+  const myTransactions = useMemo(() => {
+    if (user.type === 'merchant') {
+      return allTransactions.filter(t => t.merchantId === user.id).sort((a, b) => b.timestamp - a.timestamp);
+    } else {
+      return allTransactions.filter(t => t.citizenName === user.name).sort((a, b) => b.timestamp - a.timestamp);
+    }
+  }, [allTransactions, user]);
+
+  // Derived Statistics
+  const stats = useMemo(() => {
+    const balances = { YER: 0, USD: 0, SAR: 0 };
+    myTransactions.forEach(t => {
+      const amt = parseFloat(t.amount);
+      const isDebt = t.type === 'دين';
+      // Merchant perspective: Debt means customer owes me (+). Payment means they paid (-).
+      // Citizen perspective: Debt means I owe (-). Payment means I paid (+).
+      const modifier = user.type === 'merchant' ? (isDebt ? 1 : -1) : (isDebt ? -1 : 1);
+      balances[t.currency] += amt * modifier;
+    });
+    return balances;
+  }, [myTransactions, user]);
+
+  // Unique customers for merchant, or merchants for citizen
+  const relations = useMemo(() => {
+    const map = new Map();
+    myTransactions.forEach(t => {
+      const name = user.type === 'merchant' ? t.citizenName : users.find(u => u.id === t.merchantId)?.name || 'تاجر غير معروف';
+      if (!map.has(name)) {
+        const uInfo = users.find(u => u.name === name) || { verified: false };
+        map.set(name, { name, verified: uInfo.verified, records: [] });
+      }
+      map.get(name).records.push(t);
+    });
+    return Array.from(map.values());
+  }, [myTransactions, user, users]);
+
+  // Filter relations based on search
+  const filteredRelations = relations.filter(r => r.name.includes(searchQuery));
+
+  const Header = () => (
+    <header className="glass-panel sticky top-0 z-40 px-6 py-4 flex justify-between items-center border-b border-white/5">
+      <div className="flex items-center gap-4">
+        <div className="w-12 h-12 rounded-xl gold-bg flex items-center justify-center text-black font-black text-2xl shadow-lg">H</div>
+        <div>
+          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+            {user.name}
+            {user.verified && <ShieldCheck size={18} className="text-emerald-400 verified-glow" />}
+          </h2>
+          <span className="text-xs text-[#d4af37] bg-[#d4af37]/10 px-2 py-0.5 rounded font-medium tracking-wide">
+            {user.type === 'merchant' ? 'حساب تجاري' : 'حساب مواطن'}
+          </span>
+        </div>
+      </div>
+      <button onClick={onLogout} className="text-slate-400 hover:text-red-400 transition-colors p-2 rounded-lg hover:bg-red-500/10">
+        <LogOut size={20} />
+      </button>
+    </header>
+  );
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header />
+      
+      <main className="flex-1 p-4 md:p-8 max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        <header class="flex flex-col md:flex-row justify-between items-center glass-card p-4 md:p-6 gap-4 shadow-lg">
-            <div class="flex items-center gap-4 w-full md:w-auto">
-                <div class="w-14 h-14 gold-btn rounded-2xl flex items-center justify-center text-black font-black text-3xl shadow-inner">H</div>
-                <div>
-                    <h2 id="display-name" class="text-xl md:text-2xl font-black text-white leading-none mb-1 flex items-center"></h2>
-                    <span id="role-tag" class="text-[11px] text-[#d4af37] bg-[#d4af37]/10 px-2 py-1 rounded-md font-bold tracking-wider"></span>
-                </div>
-            </div>
-            <div class="flex gap-3 w-full md:w-auto justify-end">
-                <button onclick="openModal('settings-modal')" class="bg-zinc-900/80 p-3 rounded-xl border border-white/5 hover:border-[#d4af37]/50 hover:bg-zinc-800 transition shadow-sm" title="الإعدادات">⚙️</button>
-                <button onclick="logout()" class="bg-red-900/20 text-red-400 px-6 py-2 rounded-xl text-sm font-bold border border-red-500/20 hover:bg-red-600 hover:text-white hover:border-red-500 transition shadow-sm flex items-center gap-2">
-                    <span>خروج</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                </button>
-            </div>
-        </header>
-
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+        {/* Left Sidebar - Navigation & Relations */}
+        <div className="lg:col-span-4 space-y-6">
+          
+          {/* Global Balances */}
+          <div className="glass-panel p-6 rounded-3xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-[50px]"></div>
+            <h3 className="text-sm text-slate-400 font-bold mb-6 flex items-center gap-2">
+              <Activity size={18} className="text-blue-400" />
+              المركز المالي العام
+            </h3>
             
-            <div class="lg:col-span-4 space-y-6">
-                <div class="glass-card p-6 relative overflow-hidden group">
-                    <div class="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                    <div class="flex items-center gap-2 mb-6">
-                        <span class="text-[#d4af37] text-xl">📊</span>
-                        <h3 class="text-sm text-gray-300 font-bold uppercase tracking-wider">الرصيد الصافي العام</h3>
-                    </div>
-                    
-                    <div class="space-y-3">
-                        <div class="flex justify-between items-center bg-gradient-to-r from-blue-900/20 to-transparent p-4 rounded-xl border border-blue-500/10 hover:border-blue-500/30 transition">
-                            <span class="text-xs text-gray-400 font-bold">ريال يمني (YER)</span>
-                            <span id="gt-yer" class="font-black text-blue-400 text-xl tracking-wider">0</span>
-                        </div>
-                        <div class="flex justify-between items-center bg-gradient-to-r from-green-900/20 to-transparent p-4 rounded-xl border border-green-500/10 hover:border-green-500/30 transition">
-                            <span class="text-xs text-gray-400 font-bold">دولار أمريكي (USD)</span>
-                            <span id="gt-usd" class="font-black text-green-400 text-xl tracking-wider">0</span>
-                        </div>
-                        <div class="flex justify-between items-center bg-gradient-to-r from-orange-900/20 to-transparent p-4 rounded-xl border border-orange-500/10 hover:border-orange-500/30 transition">
-                            <span class="text-xs text-gray-400 font-bold">ريال سعودي (SAR)</span>
-                            <span id="gt-sar" class="font-black text-orange-400 text-xl tracking-wider">0</span>
-                        </div>
-                    </div>
-                </div>
+            <div className="space-y-4">
+              <BalanceRow currency="YER" name="ريال يمني" amount={stats.YER} color="blue" />
+              <BalanceRow currency="USD" name="دولار أمريكي" amount={stats.USD} color="emerald" />
+              <BalanceRow currency="SAR" name="ريال سعودي" amount={stats.SAR} color="amber" />
+            </div>
+          </div>
 
-                <div class="glass-card p-6 min-h-[400px] flex flex-col">
-                    <div class="flex items-center gap-2 mb-4">
-                        <span class="text-[#d4af37] text-xl">📋</span>
-                        <h3 class="text-sm text-gray-300 font-bold uppercase tracking-wider">قائمة الحسابات</h3>
-                    </div>
-
-                    <div id="merchant-tools" class="hidden mb-4">
-                        <div class="flex gap-2">
-                            <input id="target-search" class="text-sm bg-black/50" placeholder="ابحث أو أضف اسم المواطن..." onkeypress="if(event.key === 'Enter') addTarget()">
-                            <button onclick="addTarget()" class="gold-btn px-5 rounded-xl text-xl shadow-md hover:scale-105" title="إضافة حساب جديد">+</button>
-                        </div>
-                    </div>
-                    
-                    <div id="main-list" class="flex-grow space-y-2 overflow-y-auto pr-1" style="max-height: 400px;">
-                        </div>
+          {/* Accounts List */}
+          <div className="glass-panel rounded-3xl flex flex-col h-[500px]">
+            <div className="p-6 border-b border-white/5">
+              <h3 className="text-sm text-slate-400 font-bold mb-4 flex items-center gap-2">
+                <Users size={18} className="text-[#d4af37]" />
+                {user.type === 'merchant' ? 'قائمة العملاء' : 'الجهات الدائنة'}
+              </h3>
+              
+              {user.type === 'merchant' && (
+                <div className="relative">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                  <input 
+                    type="text" 
+                    placeholder="ابحث أو أضف عميل جديد..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if(e.key === 'Enter' && searchQuery.trim()) {
+                        setSelectedTarget({ name: searchQuery.trim(), verified: false, records: [] });
+                        setSearchQuery('');
+                      }
+                    }}
+                    className="w-full bg-slate-900/50 border border-slate-800 rounded-xl py-3 pr-10 pl-4 text-sm focus:border-[#d4af37] transition-colors outline-none"
+                  />
                 </div>
+              )}
             </div>
 
-            <div class="lg:col-span-8">
-                
-                <div id="empty-hint" class="glass-card p-12 md:p-24 text-center text-gray-500 flex flex-col items-center justify-center min-h-[600px]">
-                    <span class="text-6xl mb-4 opacity-20">📜</span>
-                    <p class="text-xl font-light">الرجاء اختيار حساب من القائمة الجانبية</p>
-                    <p class="text-sm mt-2 opacity-50">لمتابعة السجلات الحية والعمليات المالية</p>
-                </div>
-
-                <div id="details-pane" class="hidden glass-card p-6 md:p-8 min-h-[600px] flex flex-col shadow-2xl relative">
-                    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-1 bg-gradient-to-r from-transparent via-[#d4af37] to-transparent opacity-20"></div>
-
-                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-white/5 pb-6">
-                        <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 rounded-full bg-zinc-800 border border-white/10 flex items-center justify-center text-xl">👤</div>
-                            <h3 id="active-target-name" class="text-2xl md:text-3xl font-black text-white flex items-center"></h3>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {filteredRelations.length === 0 ? (
+                <div className="text-center text-slate-500 text-sm mt-10">لا يوجد بيانات لعرضها</div>
+              ) : (
+                filteredRelations.map((rel, idx) => (
+                  <button 
+                    key={idx}
+                    onClick={() => setSelectedTarget(rel)}
+                    className={`w-full text-right p-4 rounded-xl border transition-all flex items-center justify-between ${selectedTarget?.name === rel.name ? 'bg-slate-800 border-[#d4af37] shadow-lg' : 'bg-slate-900/30 border-white/5 hover:border-white/10 hover:bg-slate-900/50'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-950 flex items-center justify-center border border-white/10 text-slate-400">
+                        {user.type === 'merchant' ? <User size={18} /> : <Store size={18} />}
+                      </div>
+                      <div>
+                        <div className="font-bold text-sm text-slate-200 flex items-center gap-1">
+                          {rel.name}
+                          {rel.verified && <ShieldCheck size={14} className="text-emerald-500 verified-glow" />}
                         </div>
-                        
-                        <div class="flex gap-3 md:gap-5 bg-black/40 p-3 rounded-xl border border-white/5">
-                            <div class="text-center">
-                                <span class="block text-[10px] text-gray-500 mb-1">يمني</span>
-                                <span id="dt-yer" class="text-blue-400 font-bold text-sm"></span>
-                            </div>
-                            <div class="w-px bg-white/10"></div>
-                            <div class="text-center">
-                                <span class="block text-[10px] text-gray-500 mb-1">دولار</span>
-                                <span id="dt-usd" class="text-green-400 font-bold text-sm"></span>
-                            </div>
-                            <div class="w-px bg-white/10"></div>
-                            <div class="text-center">
-                                <span class="block text-[10px] text-gray-500 mb-1">سعودي</span>
-                                <span id="dt-sar" class="text-orange-400 font-bold text-sm"></span>
-                            </div>
-                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1">{rel.records.length} عملية مسجلة</div>
+                      </div>
                     </div>
-
-                    <div id="ops-list" class="flex-grow space-y-3 overflow-y-auto max-h-[380px] mb-6 pr-2 custom-scrollbar">
-                        </div>
-
-                    <div id="add-form" class="hidden mt-auto">
-                        <div class="bg-gradient-to-b from-zinc-900/80 to-black p-5 md:p-6 rounded-2xl border border-white/10 shadow-lg space-y-5 relative overflow-hidden">
-                            <div class="absolute top-0 right-0 w-32 h-32 bg-[#d4af37] mix-blend-overlay filter blur-[60px] opacity-10"></div>
-                            
-                            <h4 class="text-sm font-bold text-[#d4af37] flex items-center gap-2">
-                                <span>✍️</span> تسجيل عملية جديدة
-                            </h4>
-                            
-                            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
-                                <div class="md:col-span-4 relative">
-                                    <label class="block text-[10px] text-gray-400 mb-1 ml-1">المبلغ</label>
-                                    <input id="op-amt" type="number" placeholder="0.00" oninput="applyTafqit()" class="font-bold text-lg h-12">
-                                </div>
-                                <div class="md:col-span-3">
-                                    <label class="block text-[10px] text-gray-400 mb-1 ml-1">العملة</label>
-                                    <select id="op-cur" onchange="applyTafqit()" class="h-12 font-bold cursor-pointer">
-                                        <option value="YER">ريال يمني</option>
-                                        <option value="USD">دولار أمريكي</option>
-                                        <option value="SAR">ريال سعودي</option>
-                                    </select>
-                                </div>
-                                <div class="md:col-span-5">
-                                    <label class="block text-[10px] text-gray-400 mb-1 ml-1">نوع العملية</label>
-                                    <div class="flex gap-2 h-12">
-                                        <label class="flex-1 relative cursor-pointer">
-                                            <input type="radio" name="op_type_radio" value="دين" class="peer sr-only" checked onchange="updateOpType('دين')">
-                                            <div class="w-full h-full flex items-center justify-center rounded-xl border border-white/10 bg-black/50 peer-checked:bg-red-900/30 peer-checked:border-red-500 peer-checked:text-red-400 font-bold transition">عـلـيـه (دين)</div>
-                                        </label>
-                                        <label class="flex-1 relative cursor-pointer">
-                                            <input type="radio" name="op_type_radio" value="سداد" class="peer sr-only" onchange="updateOpType('سداد')">
-                                            <div class="w-full h-full flex items-center justify-center rounded-xl border border-white/10 bg-black/50 peer-checked:bg-green-900/30 peer-checked:border-green-500 peer-checked:text-green-400 font-bold transition">لـــه (سداد)</div>
-                                        </label>
-                                        <input type="hidden" id="op-type" value="دين">
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                                <div class="md:col-span-9">
-                                    <label class="block text-[10px] text-gray-400 mb-1 ml-1">البيان / الملاحظات (اختياري)</label>
-                                    <input id="op-note" type="text" placeholder="مثال: دفعة من الحساب، بضاعة..." class="h-12">
-                                </div>
-                                <div class="md:col-span-3">
-                                    <button onclick="saveOp()" class="gold-btn w-full h-12 rounded-xl shadow-lg flex items-center justify-center gap-2">
-                                        <span>تثبيت</span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div id="tafqit-text" class="tafqit-box min-h-[20px]"></div>
-                        </div>
-                    </div>
-                </div>
+                    <ChevronRight size={16} className={`transition-transform ${selectedTarget?.name === rel.name ? 'text-[#d4af37]' : 'text-slate-600 opacity-0 group-hover:opacity-100'}`} />
+                  </button>
+                ))
+              )}
             </div>
+          </div>
         </div>
-    </div>
 
-    <div id="settings-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4">
-        <div class="glass-card modal-content w-full max-w-md p-8 space-y-6 relative">
-            <button onclick="closeModal('settings-modal')" class="absolute top-4 left-4 text-gray-500 hover:text-white transition text-xl">✕</button>
-            
-            <div class="text-center mb-6">
-                <span class="text-4xl mb-2 block">🛡️</span>
-                <h3 class="text-xl font-bold gold-text">إعدادات الحماية الملكية</h3>
-                <p class="text-xs text-gray-400 mt-1">قم بتحديث بيانات الدخول الخاصة بك</p>
+        {/* Right Content - Details & Entry */}
+        <div className="lg:col-span-8 flex flex-col gap-6">
+          {!selectedTarget ? (
+            <div className="glass-panel rounded-3xl flex-1 flex flex-col items-center justify-center text-center p-12 opacity-50">
+              <FileText size={64} className="text-slate-700 mb-6" />
+              <h3 className="text-xl font-medium text-slate-400">لم يتم تحديد حساب</h3>
+              <p className="text-sm text-slate-500 mt-2">اختر حساباً من القائمة الجانبية لعرض التفاصيل أو تسجيل عمليات</p>
             </div>
-            
-            <div class="space-y-5">
-                <div class="relative">
-                    <label class="block text-xs text-gray-400 mb-1 ml-1">كلمة المرور الجديدة</label>
-                    <input id="new-pass" type="password" placeholder="••••••••" class="pr-10">
-                    <button onclick="togglePass('new-pass')" class="absolute left-4 top-[38px] opacity-40 hover:opacity-100 transition outline-none">👁️</button>
-                </div>
-                <div class="relative">
-                    <label class="block text-xs text-gray-400 mb-1 ml-1">تأكيد كلمة المرور</label>
-                    <input id="confirm-pass" type="password" placeholder="••••••••" class="pr-10">
-                    <button onclick="togglePass('confirm-pass')" class="absolute left-4 top-[38px] opacity-40 hover:opacity-100 transition outline-none">👁️</button>
-                </div>
-            </div>
-            
-            <div class="flex gap-4 pt-2">
-                <button id="btn-update-pass" onclick="updatePassword()" class="gold-btn flex-grow py-3 rounded-xl">تحديث الآن</button>
-                <button onclick="closeModal('settings-modal')" class="bg-zinc-800 px-6 py-3 rounded-xl text-white border border-white/5 hover:bg-zinc-700 transition">إلغاء</button>
-            </div>
+          ) : (
+            <AccountDetails 
+              target={selectedTarget} 
+              user={user} 
+              db={db} 
+              appId={appId} 
+              showToast={showToast} 
+              myTransactions={myTransactions.filter(t => (user.type==='merchant'? t.citizenName : t.merchantId) === (user.type==='merchant'? selectedTarget.name : selectedTarget.merchantId))} // Needs precise filtering, handled inside
+              rawTransactions={allTransactions}
+            />
+          )}
         </div>
+
+      </main>
     </div>
+  );
+};
 
-    <script>
-        // المتغيرات الأساسية
-        let user = null; 
-        let activeTarget = null; 
-        let userType = 'merchant'; 
-        let discoveredData = [];
-        let userStatuses = {}; 
+const BalanceRow = ({ currency, name, amount, color }) => {
+  const isPositive = amount > 0;
+  const isNegative = amount < 0;
+  
+  const colorMap = {
+    blue: { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20' },
+    emerald: { text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+    amber: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+    red: { text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
+  };
 
-        // ----------------------------------------------------------------
-        // دوال مساعدة للواجهة (UI Helpers)
-        // ----------------------------------------------------------------
+  const c = colorMap[color];
+  const vColor = isPositive ? colorMap.emerald.text : (isNegative ? colorMap.red.text : 'text-slate-500');
 
-        function showToast(message, type = 'error') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            const icon = type === 'success' ? '✅' : (type === 'error' ? '⚠️' : 'ℹ️');
-            toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
-            container.appendChild(toast);
-            setTimeout(() => toast.classList.add('show'), 10);
-            setTimeout(() => {
-                toast.classList.remove('show');
-                setTimeout(() => toast.remove(), 400); 
-            }, 3000);
-        }
+  return (
+    <div className={`flex justify-between items-center p-4 rounded-xl border ${c.border} ${c.bg}`}>
+      <span className="text-xs font-bold text-slate-400">{name} <span className="opacity-50">({currency})</span></span>
+      <span className={`font-black text-lg tracking-wider ${vColor}`} dir="ltr">
+        {isPositive ? '+' : isNegative ? '-' : ''} {formatCurrency(amount)}
+      </span>
+    </div>
+  );
+};
 
-        function togglePass(id) {
-            const input = document.getElementById(id);
-            input.type = input.type === 'password' ? 'text' : 'password';
-        }
+// --- Sub-component: Account Details & Operations ---
+const AccountDetails = ({ target, user, db, appId, showToast, rawTransactions }) => {
+  const [amt, setAmt] = useState('');
+  const [cur, setCur] = useState('YER');
+  const [opType, setOpType] = useState('دين');
+  const [note, setNote] = useState('');
 
-        function updateOpType(val) {
-            document.getElementById('op-type').value = val;
-        }
+  // Extract relevant records
+  const records = useMemo(() => {
+    if (user.type === 'merchant') {
+      return rawTransactions.filter(t => t.merchantId === user.id && t.citizenName === target.name).sort((a, b) => b.timestamp - a.timestamp);
+    } else {
+      // Citizen viewing a merchant
+      const merchantUser = target.name; // In this UI flow, target.name is the merchant's name
+      // We need to find the merchant ID
+      const mId = rawTransactions.find(t => t.citizenName === user.name && (t.merchantName === merchantUser || t.merchantId === target.id))?.merchantId;
+      return rawTransactions.filter(t => t.citizenName === user.name && t.merchantId === mId).sort((a, b) => b.timestamp - a.timestamp);
+    }
+  }, [rawTransactions, user, target]);
 
-        function openModal(id) { 
-            document.getElementById(id).classList.add('show'); 
-        }
-        function closeModal(id) { 
-            document.getElementById(id).classList.remove('show'); 
-            if(id === 'settings-modal') {
-                document.getElementById('new-pass').value = '';
-                document.getElementById('confirm-pass').value = '';
-            }
-        }
+  const targetStats = useMemo(() => {
+    const b = { YER: 0, USD: 0, SAR: 0 };
+    records.forEach(t => {
+      const a = parseFloat(t.amount);
+      const isDebt = t.type === 'دين';
+      const modifier = user.type === 'merchant' ? (isDebt ? 1 : -1) : (isDebt ? -1 : 1);
+      b[t.currency] += a * modifier;
+    });
+    return b;
+  }, [records, user]);
 
-        function setType(t) { 
-            userType = t; 
-            document.getElementById('sel-merchant').classList.toggle('active', t === 'merchant'); 
-            document.getElementById('sel-debtor').classList.toggle('active', t === 'debtor'); 
-        }
+  const handleSaveOp = async () => {
+    if (!amt || isNaN(amt) || parseFloat(amt) <= 0) return showToast("أدخل مبلغ صحيح", "error");
+    
+    try {
+      const transRef = collection(db, 'artifacts', appId, 'public', 'data', 'heiba_transactions');
+      await addDoc(transRef, {
+        merchantId: user.id,
+        merchantName: user.name, // saved for citizen context
+        citizenName: target.name,
+        amount: parseFloat(amt),
+        currency: cur,
+        type: opType,
+        note: note || (opType === 'دين' ? 'تسجيل دين' : 'تسجيل سداد'),
+        timestamp: Date.now()
+      });
+      showToast("تم تثبيت العملية بنجاح", "success");
+      setAmt(''); setNote('');
+    } catch (e) {
+      showToast("فشل الحفظ", "error");
+    }
+  };
 
-        // ----------------------------------------------------------------
-        // الدوال الحسابية والمنطقية
-        // ----------------------------------------------------------------
+  const handleDelete = async (id) => {
+    if(window.confirm("هل أنت متأكد من حذف هذه العملية؟")) {
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'heiba_transactions', id));
+        showToast("تم الحذف", "success");
+      } catch(e) { showToast("فشل الحذف", "error"); }
+    }
+  };
 
-        function formatAr(num) {
-            if (num == 0) return "صفر";
-            const units = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
-            const tens = ["", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
-            const hundreds = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"];
-            
-            function conv(n) {
-                let r = ""; const h = Math.floor(n / 100); const t = n % 100;
-                if (h > 0) r += hundreds[h];
-                if (t > 0) { 
-                    if (r !== "") r += " و "; 
-                    if (t < 20) r += units[t]; 
-                    else { 
-                        const s = t % 10; 
-                        const ten = Math.floor(t / 10); 
-                        if (s > 0) r += units[s] + " و "; 
-                        r += tens[ten]; 
-                    } 
-                }
-                return r;
-            }
-            
-            let res = ""; 
-            const m = Math.floor(num / 1000000); 
-            const th = Math.floor((num % 1000000) / 1000); 
-            const rem = num % 1000;
-            
-            if (m > 0) res += (m === 1 ? "مليون" : (m === 2 ? "مليونان" : conv(m) + " ملايين"));
-            if (th > 0) { 
-                if (res !== "") res += " و "; 
-                res += (th === 1 ? "ألف" : (th === 2 ? "ألفين" : conv(th) + " آلاف")); 
-            }
-            if (rem > 0) { 
-                if (res !== "") res += " و "; 
-                res += conv(rem); 
-            }
-            return res;
-        }
+  return (
+    <div className="glass-panel rounded-3xl flex flex-col h-full overflow-hidden shadow-2xl relative">
+      <div className="absolute top-0 left-1/4 right-1/4 h-1 gold-bg opacity-30 blur-[2px]"></div>
 
-        function applyTafqit() {
-            const val = document.getElementById('op-amt').value;
-            const cur = document.getElementById('op-cur').options[document.getElementById('op-cur').selectedIndex].text;
-            document.getElementById('tafqit-text').innerText = val > 0 ? "فقط " + formatAr(parseInt(val)) + " " + cur + " لا غير." : "";
-        }
+      {/* Header */}
+      <div className="p-6 md:p-8 border-b border-white/5 bg-slate-900/30 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        <div className="flex items-center gap-4">
+          <div className="w-14 h-14 rounded-2xl bg-slate-800 border border-white/10 flex items-center justify-center">
+             {user.type === 'merchant' ? <User size={24} className="text-slate-400" /> : <Store size={24} className="text-[#d4af37]" />}
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-white flex items-center gap-2">
+              {target.name}
+              {target.verified && <ShieldCheck size={20} className="text-emerald-500 verified-glow" />}
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+              كشف حساب {user.type === 'merchant' ? 'عميل' : 'تاجر'}
+            </p>
+          </div>
+        </div>
 
-        // ----------------------------------------------------------------
-        // دوال الربط مع السيرفر والعمليات الأساسية
-        // ----------------------------------------------------------------
+        {/* Mini Balances */}
+        <div className="flex gap-4 bg-slate-950/50 p-3 rounded-2xl border border-white/5">
+          {Object.entries(targetStats).map(([c, val]) => (
+            <div key={c} className="text-center px-2">
+              <span className="block text-[10px] text-slate-500 mb-1">{c === 'YER' ? 'يمني' : c === 'USD' ? 'دولار' : 'سعودي'}</span>
+              <span className={`text-sm font-bold block min-w-[60px] ${val > 0 ? (user.type==='merchant'?'text-red-400':'text-emerald-400') : val < 0 ? (user.type==='merchant'?'text-emerald-400':'text-red-400') : 'text-slate-500'}`} dir="ltr">
+                {formatCurrency(val)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
 
-        window.onload = () => { 
-            const saved = localStorage.getItem('heiba_auth_session'); 
-            if (saved) { 
-                user = JSON.parse(saved); 
-                start(); 
-            } 
-        };
+      {/* Records List */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-3">
+        {records.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-60">
+            <Database size={48} className="mb-4 text-slate-700" />
+            <p>لا توجد أي حركات مالية مسجلة</p>
+          </div>
+        ) : (
+          records.map(r => {
+            const isDebt = r.type === 'دين';
+            // Visual coloring based on perspective
+            // If merchant: Debt is Red (they owe me), Pay is Green (they paid me)
+            // If citizen: Debt is Red (I owe them), Pay is Green (I paid them)
+            const isRed = isDebt; 
 
-        async function doAuth(action) {
-            const name = document.getElementById('u-name').value.trim();
-            const password = document.getElementById('u-pass').value;
-            
-            if(!name || !password) {
-                showToast("الرجاء إدخال الاسم وكلمة المرور", "error");
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/auth', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ name, password, type: userType, action }) 
-                });
-                const data = await res.json();
+            return (
+              <div key={r.id} className={`p-4 rounded-2xl border-r-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors ${isRed ? 'bg-red-950/20 border-red-500/50 hover:bg-red-950/40' : 'bg-emerald-950/20 border-emerald-500/50 hover:bg-emerald-950/40'}`}>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${isRed ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/20 text-emerald-400'}`}>
+                      {r.type}
+                    </span>
+                    <span className="text-slate-300 font-medium text-sm">{r.note}</span>
+                  </div>
+                  <span className="text-[10px] text-slate-500">{new Date(r.timestamp).toLocaleString('ar-YE')}</span>
+                </div>
                 
-                if(res.ok) { 
-                    user = data; 
-                    if(document.getElementById('remember-me').checked) {
-                        localStorage.setItem('heiba_auth_session', JSON.stringify(user)); 
-                    }
-                    showToast("تم الدخول بنجاح", "success");
-                    start(); 
-                } else {
-                    showToast(data.error || "حدث خطأ غير معروف", "error");
-                }
-            } catch (e) {
-                user = { id: Date.now(), name: name, type: userType, myRecords: [], verified: false };
-                if(document.getElementById('remember-me').checked) localStorage.setItem('heiba_auth_session', JSON.stringify(user));
-                showToast("تم الدخول (وضع المحاكاة)", "success");
-                start();
-            }
-        }
-
-        // دالة لجلب حالات التسجيل والتوثيق للأسماء مع المزامنة اللحظية
-        async function fetchStatuses(names) {
-            if(!names || names.length === 0) return;
-            try {
-                const res = await fetch('/api/check-status', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ names, requesterId: user.id })
-                });
-                const data = await res.json();
-                
-                // تحديث حالة المستخدم الحالي نفسه (للتوثيق)
-                if(data.requesterStatus && data.requesterStatus.verified !== user.verified) {
-                    user.verified = data.requesterStatus.verified;
-                    const nameHtml = user.verified ? `<span class="verified-name-glow">${user.name}</span>` : user.name;
-                    const userVerifyBadge = user.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-                    document.getElementById('display-name').innerHTML = `${nameHtml} ${userVerifyBadge}`;
-                }
-
-                // تحديث قائمة العملاء
-                userStatuses = {...userStatuses, ...data.statuses};
-                if(user.type === 'merchant') {
-                    renderList();
-                    if(activeTarget) {
-                        const status = userStatuses[activeTarget] || {};
-                        const targetNameHtml = status.verified ? `<span class="verified-name-glow">${activeTarget}</span>` : activeTarget;
-                        const verifyBadge = status.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-                        document.getElementById('active-target-name').innerHTML = `${targetNameHtml} ${verifyBadge}`;
-                    }
-                }
-            } catch(e) {}
-        }
-
-        function start() {
-            document.getElementById('auth-ui').classList.add('hidden'); 
-            document.getElementById('main-ui').classList.remove('hidden');
-            
-            const nameHtml = user.verified ? `<span class="verified-name-glow">${user.name}</span>` : user.name;
-            const userVerifyBadge = user.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-            document.getElementById('display-name').innerHTML = `${nameHtml} ${userVerifyBadge}`;
-            document.getElementById('role-tag').innerText = user.type === 'merchant' ? '🏪 رتبة تاجر' : '👤 رتبة مواطن';
-            
-            // نظام المزامنة اللحظية (كل 4 ثواني)
-            setInterval(() => {
-                if(user.type === 'merchant') {
-                    const targets = [...new Set(user.myRecords.map(r => r.targetName))];
-                    if(activeTarget && !targets.includes(activeTarget)) targets.push(activeTarget);
-                    fetchStatuses(targets);
-                } else {
-                    fetchStatuses([user.name]);
-                }
-            }, 4000);
-
-            if(user.type === 'merchant') { 
-                document.getElementById('merchant-tools').classList.remove('hidden'); 
-                document.getElementById('add-form').classList.remove('hidden'); 
-                renderList(); 
-                calculateGrand(user.myRecords); 
-            } else { 
-                fetchAutoDebts(); 
-                setInterval(fetchAutoDebts, 4000); 
-            }
-        }
-
-        function calculateGrand(recs) {
-            let y=0, u=0, s=0; 
-            recs.forEach(r => { 
-                const a = parseFloat(r.amount); 
-                const d = r.type === 'دين'; 
-                if(r.currency === 'YER') y += d?a:-a; 
-                else if(r.currency === 'USD') u += d?a:-a; 
-                else s += d?a:-a; 
-            });
-            
-            const formatBal = (val) => {
-                const numStr = Math.abs(val).toLocaleString();
-                if(val > 0) return `<span class="text-red-400" dir="ltr">- ${numStr}</span>`; 
-                if(val < 0) return `<span class="text-green-400" dir="ltr">+ ${numStr}</span>`; 
-                return `<span class="text-gray-500">0</span>`;
-            };
-
-            document.getElementById('gt-yer').innerHTML = formatBal(y); 
-            document.getElementById('gt-usd').innerHTML = formatBal(u); 
-            document.getElementById('gt-sar').innerHTML = formatBal(s);
-        }
-
-        function addTarget() { 
-            const n = document.getElementById('target-search').value.trim(); 
-            if(!n) return; 
-            activeTarget = n; 
-            fetchStatuses([n]); 
-            showDetails(n); 
-            renderList(); 
-            document.getElementById('target-search').value = ""; 
-        }
-
-        function renderList() {
-            const t = [...new Set(user.myRecords.map(r => r.targetName))];
-            if(t.length === 0 && !activeTarget) {
-                document.getElementById('main-list').innerHTML = `<p class="text-xs text-center text-gray-500 mt-4 italic">لا يوجد حسابات مسجلة بعد.</p>`;
-                return;
-            }
-            // دمج الحساب النشط حالياً إذا لم يكن في السجلات
-            if(activeTarget && !t.includes(activeTarget)) t.push(activeTarget);
-
-            document.getElementById('main-list').innerHTML = t.map(n => {
-                const status = userStatuses[n] || { registered: false, verified: false };
-                const nHtml = status.verified ? `<span class="verified-name-glow">${n}</span>` : n;
-                const regBadge = status.registered ? '<span class="text-[9px] bg-green-900/40 text-green-400 px-1.5 py-0.5 rounded border border-green-500/30">مسجل</span>' : '<span class="text-[9px] bg-red-900/40 text-red-400 px-1.5 py-0.5 rounded border border-red-500/30">غير مسجل</span>';
-                const verifyBadge = status.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-
-                return `
-                <div onclick="showDetails('${n}')" class="p-4 bg-zinc-900/50 rounded-xl cursor-pointer border border-white/5 hover:border-[#d4af37]/50 hover:bg-zinc-800 transition flex items-center gap-3 ${activeTarget === n ? 'border-[#d4af37] bg-zinc-800 shadow-md' : ''}">
-                    <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-white/10">👤</div>
-                    <div class="font-bold text-sm flex-grow">
-                        <div class="flex items-center">${nHtml} ${verifyBadge}</div>
-                        <div class="mt-1">${regBadge}</div>
+                <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-1/3">
+                  <div className="text-left" dir="ltr">
+                    <div className={`font-black text-lg ${isRed ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {isRed ? '+' : '-'} {formatCurrency(r.amount)}
                     </div>
-                </div>`;
-            }).join('');
-        }
+                    <div className="text-[10px] text-slate-500 uppercase font-bold text-right">{r.currency}</div>
+                  </div>
+                  
+                  {user.type === 'merchant' && (
+                    <button onClick={() => handleDelete(r.id)} className="text-slate-600 hover:text-red-500 transition-colors p-2 bg-slate-900/50 rounded-lg">
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
 
-        async function fetchAutoDebts() {
-            try {
-                const res = await fetch(`/api/auto-discover?debtorName=${encodeURIComponent(user.name)}`);
-                discoveredData = await res.json();
-            } catch(e) { if(!discoveredData.length) discoveredData = []; }
-
-            let all = []; 
-            discoveredData.forEach(m => all = all.concat(m.records)); 
-            calculateGrand(all);
+      {/* Entry Form (Only for Merchant) */}
+      {user.type === 'merchant' && (
+        <div className="p-6 bg-slate-900/80 border-t border-white/5 relative z-10">
+          <div className="absolute inset-0 gold-bg opacity-[0.02] pointer-events-none"></div>
+          <h4 className="text-sm font-bold text-[#d4af37] mb-4 flex items-center gap-2">
+            <Plus size={16} /> تسجيل حركة جديدة
+          </h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+            <div className="md:col-span-3">
+              <label className="block text-[10px] text-slate-500 mb-1">المبلغ</label>
+              <input type="number" value={amt} onChange={e=>setAmt(e.target.value)} placeholder="0.00" className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 font-bold focus:border-[#d4af37] outline-none transition-colors" />
+            </div>
             
-            if(discoveredData.length === 0) {
-                document.getElementById('main-list').innerHTML = `<p class="text-xs text-center text-gray-500 mt-4 italic">لا يوجد مطالبات.</p>`;
-            } else {
-                document.getElementById('main-list').innerHTML = discoveredData.map(m => {
-                    const mHtml = m.merchantVerified ? `<span class="verified-name-glow">${m.merchantName}</span>` : m.merchantName;
-                    const verifyBadge = m.merchantVerified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-                    return `
-                    <div onclick="showDetails('${m.merchantName}')" class="p-4 bg-zinc-900 border border-blue-900/30 rounded-xl mb-2 hover:border-blue-500 transition cursor-pointer flex justify-between items-center ${activeTarget === m.merchantName ? 'border-blue-500 bg-zinc-800' : ''}">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-black flex items-center justify-center text-sm border border-blue-900/50">🏪</div>
-                            <p class="font-bold text-sm flex items-center">${mHtml} ${verifyBadge}</p>
-                        </div>
-                    </div>`;
-                }).join('');
-            }
-            if(activeTarget) showDetails(activeTarget);
-        }
+            <div className="md:col-span-2">
+              <label className="block text-[10px] text-slate-500 mb-1">العملة</label>
+              <select value={cur} onChange={e=>setCur(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 font-bold focus:border-[#d4af37] outline-none transition-colors appearance-none">
+                <option value="YER">يمني</option>
+                <option value="USD">دولار</option>
+                <option value="SAR">سعودي</option>
+              </select>
+            </div>
 
-        function showDetails(name) {
-            activeTarget = name; 
-            document.getElementById('empty-hint').classList.add('hidden'); 
-            document.getElementById('details-pane').classList.remove('hidden');
-            
-            let verifyBadge = '';
-            let nameHtml = name;
-            if (user.type === 'merchant') {
-                const status = userStatuses[name] || {};
-                if(status.verified) nameHtml = `<span class="verified-name-glow">${name}</span>`;
-                verifyBadge = status.verified ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-            } else {
-                const m = discoveredData.find(m => m.merchantName === name);
-                if(m && m.merchantVerified) nameHtml = `<span class="verified-name-glow">${name}</span>`;
-                verifyBadge = (m && m.merchantVerified) ? '<style> @keyframes glassGlow { 0% { background-position: -150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } 50% { box-shadow: 0 0 25px rgba(34, 197, 94, 0.8), 0 0 10px white; } 100% { background-position: 150%; box-shadow: 0 0 10px rgba(34, 197, 94, 0.4); } } .fadi-glass-badge { position: relative; display: inline-flex; align-items: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(255, 255, 255, 0.4) 50%, rgba(34, 197, 94, 0.9) 100%); background-size: 200% auto; color: white; padding: 2px 10px; border-radius: 50px; font-family: sans-serif; vertical-align: middle; gap: 4px; margin-right: 5px; overflow: hidden; animation: glassGlow 5s linear infinite; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(2px); } .fadi-glass-badge::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%); transform: skewX(-25deg); animation: glassGlow 5s linear infinite; } </style> <span class="fadi-glass-badge"> <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 2L14.5 4.5L18 3.5L19 7L22.5 8.5L21.5 12L24 14.5L20.5 15.5L19.5 19L16 18L13.5 20.5L12 17L8.5 20.5L6 18L2.5 19L1.5 15.5L0 14.5L2.5 12L1.5 8.5L5 7L6 3.5L9.5 4.5L12 2Z" fill="white"/> <path d="M9 12L11 14L15 10" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/> </svg> <span style="font-size: 10px; font-weight: bold; line-height: 1; white-space: nowrap; text-shadow: 1px 1px 2px rgba(0,0,0,0.3);">موثق</span> </span>' : '';
-            }
-            document.getElementById('active-target-name').innerHTML = `${nameHtml} ${verifyBadge}`;
-            
-            let records = (user.type === 'merchant') ? user.myRecords.filter(r => r.targetName === name) : (discoveredData.find(m => m.merchantName === name)?.records || []);
-            let y=0, u=0, s=0;
-            
-            if(records.length === 0) {
-                document.getElementById('ops-list').innerHTML = `<div class="p-8 text-center text-gray-500 italic text-sm border border-dashed border-white/10 rounded-xl">لا توجد عمليات.</div>`;
-            } else {
-                document.getElementById('ops-list').innerHTML = records.map(r => {
-                    const a = parseFloat(r.amount); const d = r.type === 'دين'; 
-                    if(r.currency === 'YER') y += d?a:-a; else if(r.currency === 'USD') u += d?a:-a; else s += d?a:-a; 
-                    return `
-                        <div class="p-4 ${d ? 'bg-red-900/10 border-red-900/50' : 'bg-green-900/10 border-green-900/50'} rounded-xl border-r-4 flex justify-between items-center">
-                            <div>
-                                <p class="font-bold text-sm text-gray-200">${r.note || (d ? 'تسجيل دين' : 'تسجيل سداد')}</p>
-                                <p class="text-[10px] text-gray-500">${new Date(r.date).toLocaleDateString('ar-YE')}</p>
-                            </div>
-                            <div class="text-left" dir="ltr">
-                                <p class="text-xl font-black ${d ? 'text-red-400' : 'text-green-400'}">${d ? '+' : '-'} ${a.toLocaleString()}</p>
-                                <p class="text-[10px] opacity-60 uppercase font-bold">${r.currency}</p>
-                            </div>
-                        </div>`;
-                }).reverse().join(''); 
-            }
+            <div className="md:col-span-4 flex gap-2 h-[50px]">
+              <button onClick={() => setOpType('دين')} className={`flex-1 rounded-xl font-bold text-sm border transition-colors ${opType === 'دين' ? 'bg-red-950/50 border-red-500 text-red-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}>
+                عليه (دين)
+              </button>
+              <button onClick={() => setOpType('سداد')} className={`flex-1 rounded-xl font-bold text-sm border transition-colors ${opType === 'سداد' ? 'bg-emerald-950/50 border-emerald-500 text-emerald-400' : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-700'}`}>
+                لــه (سداد)
+              </button>
+            </div>
 
-            document.getElementById('dt-yer').innerText = Math.abs(y).toLocaleString(); 
-            document.getElementById('dt-yer').className = `text-sm font-bold ${y > 0 ? 'text-red-400' : (y < 0 ? 'text-green-400' : 'text-gray-500')}`;
-            document.getElementById('dt-usd').innerText = Math.abs(u).toLocaleString(); 
-            document.getElementById('dt-usd').className = `text-sm font-bold ${u > 0 ? 'text-red-400' : (u < 0 ? 'text-green-400' : 'text-gray-500')}`;
-            document.getElementById('dt-sar').innerText = Math.abs(s).toLocaleString();
-            document.getElementById('dt-sar').className = `text-sm font-bold ${s > 0 ? 'text-red-400' : (s < 0 ? 'text-green-400' : 'text-gray-500')}`;
+            <div className="md:col-span-3">
+               <button onClick={handleSaveOp} className="w-full gold-bg text-black font-bold h-[50px] rounded-xl hover:scale-105 transition-transform shadow-lg flex items-center justify-center gap-2">
+                 تثبيت <CheckCircle2 size={18} />
+               </button>
+            </div>
 
-            if(user.type === 'merchant') renderList();
-        }
+            <div className="md:col-span-12 mt-2">
+              <input type="text" value={note} onChange={e=>setNote(e.target.value)} placeholder="البيان (اختياري) - مثال: دفعة حساب، بضاعة..." className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-sm focus:border-[#d4af37] outline-none transition-colors" />
+              <div className="text-[11px] text-[#d4af37] font-medium mt-2 min-h-[16px]">
+                {amt && !isNaN(amt) && `فقط ${formatAr(parseInt(amt))} ${cur === 'YER' ? 'ريال يمني' : cur === 'USD' ? 'دولار أمريكي' : 'ريال سعودي'} لا غير.`}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
-        async function saveOp() {
-            const a = document.getElementById('op-amt').value; 
-            if(!a || !activeTarget || parseFloat(a) <= 0) { showToast("الرجاء إدخال مبلغ صحيح", "error"); return; }
-            const newRecord = { 
-                id: Date.now(), targetName: activeTarget, amount: a, currency: document.getElementById('op-cur').value, 
-                type: document.getElementById('op-type').value, note: document.getElementById('op-note').value, date: new Date().toISOString() 
-            };
-            user.myRecords.push(newRecord);
-            showDetails(activeTarget); calculateGrand(user.myRecords);
-            try { fetch('/api/sync', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ userId: user.id, myRecords: user.myRecords }) }); } catch(e) {}
-            showToast("تم تثبيت العملية بنجاح", "success");
-            document.getElementById('op-amt').value = ""; document.getElementById('op-note').value = ""; document.getElementById('tafqit-text').innerText = "";
-            localStorage.setItem('heiba_auth_session', JSON.stringify(user));
-        }
+// --- Admin Dashboard (Replaces Telegram Logic) ---
+const AdminDashboard = ({ users, db, appId, showToast, onLogout }) => {
+  const [search, setSearch] = useState('');
 
-        async function updatePassword() {
-            const p1 = document.getElementById('new-pass').value; const p2 = document.getElementById('confirm-pass').value;
-            if(!p1) return showToast("الرجاء إدخال كلمة مرور", "error");
-            if(p1 !== p2) return showToast("كلمتا المرور غير متطابقتين", "error");
-            try {
-                const res = await fetch('/api/update-pass', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ userId: user.id, newPass: p1 }) });
-                if(res.ok) { user.password = p1; showToast("تم التحديث!", "success"); closeModal('settings-modal'); }
-            } catch(e) { user.password = p1; localStorage.setItem('heiba_auth_session', JSON.stringify(user)); showToast("تم التحديث!", "success"); closeModal('settings-modal'); }
-        }
+  const toggleVerify = async (u) => {
+    try {
+      const ref = doc(db, 'artifacts', appId, 'public', 'data', 'heiba_users', u.id);
+      await updateDoc(ref, { verified: !u.verified });
+      showToast(`تم ${!u.verified ? 'توثيق' : 'إلغاء توثيق'} الحساب`, 'success');
+    } catch(e) { showToast("حدث خطأ", 'error'); }
+  };
 
-        function logout() { localStorage.removeItem('heiba_auth_session'); location.reload(); }
-    </script>
-</body>
-</html>
+  const deleteUser = async (id) => {
+    if(window.confirm("حذف المستخدم نهائياً؟ (لا يحذف العمليات المرتبطة به لضمان السجلات)")) {
+      try {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'heiba_users', id));
+        showToast("تم الحذف", 'success');
+      } catch(e) { showToast("حدث خطأ", 'error'); }
+    }
+  };
+
+  const filtered = users.filter(u => u.name.includes(search) || u.type.includes(search));
+  const merchants = users.filter(u => u.type === 'merchant').length;
+  const citizens = users.filter(u => u.type === 'debtor').length;
+
+  return (
+    <div className="min-h-screen p-6 max-w-6xl mx-auto">
+      <header className="flex justify-between items-center mb-8 glass-panel p-6 rounded-3xl">
+        <div>
+          <h1 className="text-2xl font-black text-white flex items-center gap-3">
+            <Shield className="text-[#d4af37]" /> لوحة التحكم السيادية
+          </h1>
+          <p className="text-slate-400 text-sm mt-1">إدارة المستخدمين والتوثيق</p>
+        </div>
+        <button onClick={onLogout} className="bg-red-500/10 text-red-400 px-4 py-2 rounded-xl font-bold border border-red-500/20 hover:bg-red-500 hover:text-white transition">خروج</button>
+      </header>
+
+      <div className="grid grid-cols-3 gap-6 mb-8">
+        <div className="glass-panel p-6 rounded-2xl border-t-4 border-blue-500">
+          <p className="text-slate-400 text-sm">إجمالي الحسابات</p>
+          <p className="text-4xl font-black text-white mt-2">{users.length}</p>
+        </div>
+        <div className="glass-panel p-6 rounded-2xl border-t-4 border-[#d4af37]">
+          <p className="text-slate-400 text-sm">التجار</p>
+          <p className="text-4xl font-black text-white mt-2">{merchants}</p>
+        </div>
+        <div className="glass-panel p-6 rounded-2xl border-t-4 border-emerald-500">
+          <p className="text-slate-400 text-sm">المواطنين</p>
+          <p className="text-4xl font-black text-white mt-2">{citizens}</p>
+        </div>
+      </div>
+
+      <div className="glass-panel rounded-3xl p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold">إدارة الأعضاء</h2>
+          <input type="text" placeholder="بحث باسم المستخدم..." value={search} onChange={e=>setSearch(e.target.value)} className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 w-64 focus:border-[#d4af37] outline-none" />
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-sm">
+            <thead className="bg-slate-900/50 text-slate-400">
+              <tr>
+                <th className="p-4 rounded-r-xl">الاسم</th>
+                <th className="p-4">النوع</th>
+                <th className="p-4">كلمة المرور</th>
+                <th className="p-4">تاريخ التسجيل</th>
+                <th className="p-4 rounded-l-xl text-center">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {filtered.map(u => (
+                <tr key={u.id} className="hover:bg-slate-800/30 transition">
+                  <td className="p-4 font-bold flex items-center gap-2">
+                    {u.name} {u.verified && <ShieldCheck size={16} className="text-emerald-500 verified-glow" />}
+                  </td>
+                  <td className="p-4">{u.type === 'merchant' ? 'تاجر' : 'مواطن'}</td>
+                  <td className="p-4 font-mono text-slate-500">{u.password}</td>
+                  <td className="p-4 text-slate-500">{new Date(u.createdAt).toLocaleDateString('ar-YE')}</td>
+                  <td className="p-4 flex justify-center gap-2">
+                    <button onClick={() => toggleVerify(u)} className={`px-3 py-1 rounded-lg text-xs font-bold border ${u.verified ? 'border-amber-500/50 text-amber-500 hover:bg-amber-500/10' : 'border-emerald-500/50 text-emerald-500 hover:bg-emerald-500/10'}`}>
+                      {u.verified ? 'إلغاء التوثيق' : 'توثيق الحساب'}
+                    </button>
+                    <button onClick={() => deleteUser(u.id)} className="px-3 py-1 rounded-lg text-xs font-bold border border-red-500/50 text-red-500 hover:bg-red-500/10">
+                      حذف
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
