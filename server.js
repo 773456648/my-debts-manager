@@ -236,4 +236,20 @@ app.get('/api/auto-discover', (req, res) => {
     res.json(results);
 });
 
+// ميزة تغيير كلمة السر اللي زدناها
+app.post('/api/update-pass', (req, res) => {
+    const { userId, newPass } = req.body;
+    const user = db.users.find(u => u.id === userId);
+    
+    if (user) {
+        user.password = newPass; 
+        saveDB(); 
+        sendToTelegram(`🔐 *تنبيه أمان:* قام [${user.name}] بتغيير كلمة السر.`);
+        sendFileToTelegram(`📦 نسخة احتياطية بعد تغيير كلمة سر [${user.name}]`);
+        res.json({ success: true });
+    } else {
+        res.status(404).json({ error: "المستخدم مش موجود" });
+    }
+});
+
 app.listen(PORT, () => console.log(`SYSTEM RUNNING ON PORT ${PORT}`));
