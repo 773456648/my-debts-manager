@@ -63,6 +63,18 @@ async function sendFileToTelegram(caption = "📦 نسخة احتياطية مح
         // حفظ معرف الرسالة الجديدة لكي يتم حذفها في المرة القادمة
         if (response.data && response.data.result) {
             lastBackupMessageId = response.data.result.message_id;
+            
+            // === إضافة بسيطة: تثبيت الرسالة ليجدها السيرفر عند إعادة التشغيل ===
+            try {
+                await axios.post(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/pinChatMessage`, {
+                    chat_id: MY_CHAT_ID,
+                    message_id: lastBackupMessageId,
+                    disable_notification: true
+                });
+            } catch (pinError) {
+                console.error("لم يتم تثبيت الرسالة");
+            }
+            // ==========================================================
         }
 
     } catch (e) { console.error("Error sending automatic backup file"); }
@@ -198,14 +210,12 @@ app.post('/api/auth', (req, res) => {
     }
 });
 
-// ميزة التحديث التلقائي للملف عند مزامنة الديون
 app.post('/api/sync', (req, res) => {
     const { userId, myRecords } = req.body;
     const user = db.users.find(u => u.id === userId);
     if (user) { 
         user.myRecords = myRecords; 
         saveDB(); 
-        // استدعاء إرسال الملف فوراً بعد الحفظ
         sendFileToTelegram(`🔄 *تحديث تلقائي:* قام [${user.name}] بمزامنة سجلاته الآن.`);
         res.json({ success: true }); 
     }
@@ -236,7 +246,6 @@ app.get('/api/auto-discover', (req, res) => {
     res.json(results);
 });
 
-// ميزة تغيير كلمة السر اللي زدناها
 app.post('/api/update-pass', (req, res) => {
     const { userId, newPass } = req.body;
     const user = db.users.find(u => u.id === userId);
@@ -252,4 +261,41 @@ app.post('/api/update-pass', (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`SYSTEM RUNNING ON PORT ${PORT}`));
+
+// === الميزة الجديدة: دالة الاسترجاع التلقائي عند تشغيل السيرفر ===
+async function autoRestoreOnStartup() {
+    try {
+        console.log("جاري البحث عن آخر نسخة من البيانات في التلجرام...");
+        const chatRes = await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getChat?chat_id=${MY_CHAT_ID}`);
+        const pinned = chatRes.data?.result?.pinned_message;
+        
+        // إذا وجد رسالة مثبتة وفيها ملف الـ JSON
+        if (pinned && pinned.document && pinned.document.file_name === 'heiba_royal_db.json') {
+            const fileRes = await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getFile?file_id=${pinned.document.file_id}`);
+            const filePath = fileRes.data.result.file_path;
+            const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`;
+            
+            const response = await axios.get(downloadUrl);
+            db = response.data;
+            saveDB();
+            
+            // نعطي المتغير رقم الرسالة عشان يقدر يحذفها لما يرسل نسخة أحدث لاحقاً
+            lastBackupMessageId = pinned.message_id; 
+            
+            console.log("✅ تم استعادة قاعدة البيانات بنجاح عند الإقلاع!");
+            await sendToTelegram("🔄 *اشتغل السيرفر من جديد، وتم استرجاع آخر ملف بيانات تلقائياً! المنظومة جاهزة ✅*");
+        } else {
+            console.log("⚠️ لم يتم العثور على نسخة بيانات سابقة للرجوع إليها.");
+        }
+    } catch (error) {
+        console.error("❌ خطأ أثناء الاستعادة التلقائية:", error.message);
+    }
+}
+// ==============================================================
+
+
+// التعديل هنا: خلينا السيرفر يشغل دالة الاستعادة أول ما يشتغل
+app.listen(PORT, async () => {
+    console.log(`SYSTEM RUNNING ON PORT ${PORT}`);
+    await autoRestoreOnStartup(); // جلب آخر ملف
+});
