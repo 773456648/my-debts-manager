@@ -252,4 +252,53 @@ app.post('/api/update-pass', (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`SYSTEM RUNNING ON PORT ${PORT}`));
+// --- دالة الإنقاذ: تشتغل مرة واحدة عند تشغيل السيرفر ---
+async function emergencyRestore() {
+    if (fs.existsSync(DB_PATH)) {
+        try {
+            const stats = fs.statSync(DB_PATH);
+            if (stats.size > 10) { 
+                console.log("✅ القاعدة موجودة وسليمة، ما بش داعي للاستعادة.");
+                return; 
+            }
+        } catch(e) {}
+    }
+
+    console.log("⚠️ القاعدة مصفرة! جاري البحث عن منقذ في التلجرام...");
+
+    try {
+        const res = await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getUpdates?limit=100&offset=-1`);
+        const updates = res.data.result;
+
+        let backupFileId = null;
+        for (let i = updates.length - 1; i >= 0; i--) {
+            const msg = updates[i].message || updates[i].channel_post;
+            if (msg && msg.document && msg.document.file_name === 'heiba_royal_db.json') {
+                backupFileId = msg.document.file_id;
+                break; 
+            }
+        }
+
+        if (backupFileId) {
+            const fileRes = await axios.get(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getFile?file_id=${backupFileId}`);
+            const filePath = fileRes.data.result.file_path;
+            const downloadUrl = `https://api.telegram.org/file/bot${TELEGRAM_TOKEN}/${filePath}`;
+            
+            const fileData = await axios.get(downloadUrl);
+            db = fileData.data;
+            saveDB();
+            
+            await sendToTelegram("🛠 *تم الاستعادة التلقائية بنجاح!* السيرفر استعاد ذاكرته واشتغل طبيعي.");
+            console.log("✅ تم استرجاع الملف بنجاح.");
+        } else {
+            await sendToTelegram("⚠️ *تنبيه:* السيرفر اشتغل والقاعدة مصفرة، وما لقيت نسخة احتياطية في آخر الرسايل حق البوت.");
+        }
+    } catch (e) {
+        console.error("خطأ في عملية الإنقاذ التلقائي:", e.message);
+    }
+}
+
+// استدعاء الدالة قبل تشغيل السيرفر
+emergencyRestore().then(() => {
+    app.listen(PORT, () => console.log(`SYSTEM RUNNING ON PORT ${PORT}`));
+});
