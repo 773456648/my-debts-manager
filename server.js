@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3000;
 const DB_PATH = './heiba_royal_db.json';
 
 // إعدادات التلجرام
-const TELEGRAM_TOKEN = '7543475859:AAENXZxHPQZafOlvBwFr6EatUFD31iYq-ks';
+const TELEGRAM_TOKEN = '8804052033:AAHFxsltmm4cVmM_ujmcCtaB5uSlcMt50t0';
 const MY_CHAT_ID = '5042495708';
 const ADMIN_PASSWORD = '771232690'; 
 
